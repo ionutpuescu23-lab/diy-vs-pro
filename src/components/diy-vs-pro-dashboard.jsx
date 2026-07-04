@@ -989,6 +989,17 @@ export default function DIYvsProDashboard() {
   const [diyHours, setDiyHours] = useState(12);
   const [analysis, setAnalysis] = useState(null);   // last vision result (safety flag lives here)
   const [roomDims, setRoomDims] = useState({ length: 4, width: 3 });
+  const [bgImage, setBgImage] = useState(null);     // ambient background photo — purely decorative
+
+  // One-off ambient background photo so the app reads as a premium property tool
+  // rather than a bare spreadsheet. Purely decorative: fails silently to the flat
+  // paper colour if there's no Pexels key or the request fails.
+  useEffect(() => {
+    fetch(`/api/image-search?q=${encodeURIComponent("luxury modern house architecture")}&orientation=landscape`)
+      .then((r) => r.json())
+      .then((data) => { if (data?.url) setBgImage(data.url); })
+      .catch(() => {});
+  }, []);
 
   /* ------------------------- derived calculations -------------------------- */
   const region = useMemo(() => {
@@ -1036,7 +1047,20 @@ export default function DIYvsProDashboard() {
 
   /* -------------------------------- render --------------------------------- */
   return (
-    <div className="min-h-screen" style={{ background: T.paper, color: T.ink }}>
+    <div className="min-h-screen relative" style={{ color: T.ink }}>
+      {/* Ambient background photo — fixed behind everything, tinted so panels stay crisp */}
+      <div
+        className="fixed inset-0 -z-10"
+        style={{
+          backgroundColor: T.paper,
+          backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        <div className="absolute inset-0" style={{ background: "rgba(244,247,250,0.90)" }} />
+      </div>
+
       {/* Load the two project faces once */}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />

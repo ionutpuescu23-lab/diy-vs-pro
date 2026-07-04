@@ -7,6 +7,7 @@
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") || "").trim();
+  const orientation = searchParams.get("orientation") || "square";
   if (!q) return Response.json({ url: null });
 
   const apiKey = process.env.PEXELS_API_KEY;
@@ -14,7 +15,7 @@ export async function GET(request) {
 
   try {
     const res = await fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=1&orientation=square`,
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=1&orientation=${orientation}`,
       { headers: { Authorization: apiKey } }
     );
     if (!res.ok) return Response.json({ url: null, reason: `pexels_${res.status}` });
@@ -24,7 +25,7 @@ export async function GET(request) {
     if (!photo) return Response.json({ url: null });
 
     return Response.json({
-      url: photo.src.medium,
+      url: orientation === "landscape" ? (photo.src.large2x || photo.src.large) : photo.src.medium,
       photographer: photo.photographer,
       photographerUrl: photo.photographer_url,
       pexelsUrl: photo.url,
