@@ -206,6 +206,31 @@ function VisualAssessor({ onMaterials, onAnalysis }) {
   const [result, setResult] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
+  const [mockupBusy, setMockupBusy] = useState(false);
+  const [mockupError, setMockupError] = useState("");
+  const [mockupImage, setMockupImage] = useState(null);
+
+  const visualizeFix = async () => {
+    if (!image || !result) return;
+    setMockupBusy(true); setMockupError(""); setMockupImage(null);
+    try {
+      const response = await fetch("/api/design-mockup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageData: image.data, mediaType: image.mediaType,
+          issue: result.issue, rootCause: result.rootCause,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Mockup generation failed");
+      setMockupImage(data.image);
+    } catch (e) {
+      setMockupError(e.message || "Couldn't generate a mockup — try again.");
+    } finally {
+      setMockupBusy(false);
+    }
+  };
 
   // Read a File into base64 for the vision request + object URL for preview.
   const loadFile = (file) => {
@@ -334,6 +359,35 @@ function VisualAssessor({ onMaterials, onAnalysis }) {
               <CheckCircle2 size={14} />
               {result.materials?.length || 0} materials sent to the price engine · trade &amp; days sent to labour estimator
             </div>
+
+            {image && (
+              <div className="pt-2 border-t" style={{ borderColor: T.line }}>
+                <button onClick={visualizeFix} disabled={mockupBusy}
+                        className="w-full rounded py-2 text-xs font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
+                        style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
+                  {mockupBusy ? <Loader2 size={14} className="animate-spin" /> : "🎨"}
+                  {mockupBusy ? "GENERATING MOCKUP…" : "VISUALIZE THE FIX (AI MOCKUP)"}
+                </button>
+                {mockupError && <p className="mt-1 text-xs" style={{ color: T.danger }}>{mockupError}</p>}
+                {mockupImage && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <Eyebrow>Before</Eyebrow>
+                      <img src={image.previewUrl} alt="Before" className="mt-1 rounded w-full object-cover" style={{ aspectRatio: "1/1" }} />
+                    </div>
+                    <div>
+                      <Eyebrow color={T.diy}>After (AI mockup)</Eyebrow>
+                      <img src={mockupImage} alt="After — AI generated mockup" className="mt-1 rounded w-full object-cover" style={{ aspectRatio: "1/1" }} />
+                    </div>
+                  </div>
+                )}
+                {mockupImage && (
+                  <p className="mt-1 text-[11px]" style={{ color: T.faint }}>
+                    AI-generated impression only — not a guarantee of the actual finished result.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Panel>
@@ -606,6 +660,43 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
   const [guide, setGuide] = useState(null);
   const [beginnerMode, setBeginnerMode] = useState(true);
 
+  const [showMeasure, setShowMeasure] = useState(false);
+  const [measurePhoto, setMeasurePhoto] = useState(null); // { data, mediaType, previewUrl }
+  const [refObject, setRefObject] = useState("a4");
+  const [measureBusy, setMeasureBusy] = useState(false);
+  const [measureError, setMeasureError] = useState("");
+  const [measureResult, setMeasureResult] = useState(null); // { confidence, notes }
+  const measureFileRef = useRef(null);
+
+  const loadMeasurePhoto = (file) => {
+    if (!file || !file.type.startsWith("image/")) { setMeasureError("Please choose a JPG or PNG photo."); return; }
+    setMeasureError("");
+    const reader = new FileReader();
+    reader.onload = () =>
+      setMeasurePhoto({ data: reader.result.split(",")[1], mediaType: file.type, previewUrl: URL.createObjectURL(file) });
+    reader.readAsDataURL(file);
+  };
+
+  const estimateFromPhoto = async () => {
+    if (!measurePhoto) return;
+    setMeasureBusy(true); setMeasureError(""); setMeasureResult(null);
+    try {
+      const response = await fetch("/api/measure-room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageData: measurePhoto.data, mediaType: measurePhoto.mediaType, referenceObject: refObject }),
+      });
+      const parsed = await response.json();
+      if (!response.ok) throw new Error(parsed.error || "Estimate failed");
+      setRoomDims({ length: parsed.widthM, width: parsed.heightM });
+      setMeasureResult({ confidence: parsed.confidence, notes: parsed.notes });
+    } catch (e) {
+      setMeasureError("Couldn't estimate from that photo — try a clearer shot with the reference object fully visible.");
+    } finally {
+      setMeasureBusy(false);
+    }
+  };
+
   // Keep the severity dropdown in sync the first time a photo analysis lands.
   useEffect(() => { if (analysis?.severity) setSeverity(analysis.severity); }, [analysis]);
 
@@ -652,6 +743,50 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
             </div>
           </div>
         </div>
+
+        <button onClick={() => setShowMeasure((s) => !s)}
+                className="mt-3 text-xs font-bold flex items-center gap-1" style={{ color: T.blue }}>
+          <Camera size={13} /> {showMeasure ? "Hide photo estimate" : "No tape measure? Estimate from a photo"}
+        </button>
+
+        {showMeasure && (
+          <div className="mt-3 rounded-lg border p-3" style={{ borderColor: T.line, background: T.paper }}>
+            <p className="text-xs" style={{ color: T.faint }}>
+              Place an A4 sheet or a card flat against the wall, photograph the wall so the object is fully visible,
+              and we'll estimate the width/height from it. This is a rough estimate — not a substitute for a tape measure.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <select value={refObject} onChange={(e) => setRefObject(e.target.value)}
+                      className="rounded border px-2 py-1.5 text-sm bg-white" style={{ borderColor: T.line }}>
+                <option value="a4">Reference: A4 sheet of paper</option>
+                <option value="card">Reference: credit/debit card</option>
+              </select>
+              <button onClick={() => measureFileRef.current?.click()}
+                      className="rounded border px-3 py-1.5 text-xs font-bold" style={{ borderColor: T.line, color: T.ink }}>
+                {measurePhoto ? "Change photo" : "Choose photo"}
+              </button>
+              <input ref={measureFileRef} type="file" accept="image/*" capture="environment" className="hidden"
+                     onChange={(e) => loadMeasurePhoto(e.target.files[0])} />
+            </div>
+            {measurePhoto && <img src={measurePhoto.previewUrl} alt="Room reference" className="mt-2 max-h-40 rounded" />}
+            <button onClick={estimateFromPhoto} disabled={!measurePhoto || measureBusy}
+                    className="mt-2 w-full rounded py-2 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
+                    style={{ background: T.blue, fontFamily: "'Archivo', sans-serif" }}>
+              {measureBusy ? <Loader2 size={14} className="animate-spin" /> : <Ruler size={14} />}
+              {measureBusy ? "ESTIMATING…" : "ESTIMATE DIMENSIONS"}
+            </button>
+            {measureError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{measureError}</p>}
+            {measureResult && (
+              <div className="mt-2 flex items-start gap-1.5 text-xs rounded p-1.5"
+                   style={{ background: measureResult.confidence === "high" ? T.diySoft : "#FDF6E3",
+                            color: measureResult.confidence === "high" ? T.diy : T.amber }}>
+                <Info size={12} className="mt-0.5 shrink-0" />
+                <span><b className="uppercase">{measureResult.confidence} confidence</b> — {measureResult.notes}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <p className="mt-3 text-xs" style={{ color: T.faint }}>
           Issue: <b>{analysis?.issue || "no photo analysed yet — plan will be generic"}</b> ·
           Trade: <b>{trade.name}</b> · Materials: <b>{materials.length}</b> rows · Area: <b>{region.area || "—"}</b>
