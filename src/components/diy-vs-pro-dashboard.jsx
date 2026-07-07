@@ -137,6 +137,21 @@ function toolIcon(name = "") {
 
 /* --------------------------- SMALL UI ATOMS ------------------------------ */
 
+// Brand mark — stylised Mjolnir (Thor's hammer), matching the app/PWA icon.
+// `bg` is used for the strap-binding cutout lines, so pass whatever this
+// renders on top of (defaults to the header badge's orange).
+function MjolnirIcon({ size = 24, color = "white", bg = T.pro }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <path d="M 24 16 L 76 16 L 85 25 L 85 37 L 76 46 L 24 46 L 15 37 L 15 25 Z" fill={color} />
+      <rect x="44" y="46" width="12" height="36" rx="2" fill={color} />
+      <rect x="44" y="50" width="12" height="3.5" fill={bg} />
+      <rect x="44" y="57" width="12" height="3.5" fill={bg} />
+      <path d="M 44.5 82 q 0 9 5.5 9 q 5.5 0 5.5 -9" stroke={color} strokeWidth="4" fill="none" />
+    </svg>
+  );
+}
+
 // Uppercase blueprint-style label above a field or block.
 function Eyebrow({ children, color = T.blue }) {
   return (
@@ -784,7 +799,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
 // Falls back to the existing icon-tile look if there's no key / no result yet.
 const imageCache = new Map();
 
-function ProductImage({ query, fallbackIcon: FallbackIcon, fallbackColor = "#5B6B7C", height = "h-28" }) {
+function ProductImage({ query, fallbackIcon: FallbackIcon, fallbackColor = "#5B6B7C", height = "h-44" }) {
   const [state, setState] = useState(() => (imageCache.has(query) ? imageCache.get(query) : null));
 
   useEffect(() => {
@@ -829,17 +844,17 @@ function MaterialCard({ material, tier, note }) {
       <div className="p-3 flex flex-col grow">
         <p className="font-semibold text-sm" style={{ color: T.ink }}>{material.name}</p>
         <p className="text-xs" style={{ color: T.faint }}>{material.qty} × {material.unit}</p>
-        <div className="mt-2 flex items-center justify-between" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-          <span className="flex flex-col">
-            <span className="text-[10px] uppercase" style={{ color: T.faint }}>Trade</span>
-            <b className="text-sm" style={{ color: tier === "budget" ? T.blue : T.ink }}>{money(material.budget)}</b>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="rounded p-2 border" style={{ borderColor: tier === "budget" ? T.blue : T.line, background: tier === "budget" ? "#EDF3F9" : T.paper }}>
+            <span className="text-[10px] uppercase font-bold" style={{ color: T.faint }}>Trade</span>
+            <b className="block text-sm" style={{ color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }}>{money(material.budget)}</b>
             <span className="text-[10px]" style={{ color: T.faint }}>@ {note?.budgetSupplier || "trade counter"}</span>
-          </span>
-          <span className="flex flex-col text-right">
-            <span className="text-[10px] uppercase" style={{ color: T.faint }}>Retail</span>
-            <b className="text-sm" style={{ color: tier === "high" ? T.blue : T.ink }}>{money(material.high)}</b>
+          </div>
+          <div className="rounded p-2 border" style={{ borderColor: tier === "high" ? T.blue : T.line, background: tier === "high" ? "#EDF3F9" : T.paper }}>
+            <span className="text-[10px] uppercase font-bold" style={{ color: T.faint }}>Retail</span>
+            <b className="block text-sm" style={{ color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }}>{money(material.high)}</b>
             <span className="text-[10px]" style={{ color: T.faint }}>@ {note?.highSupplier || "DIY retailer"}</span>
-          </span>
+          </div>
         </div>
         {delta > 0 && (
           <p className="mt-1 text-[11px]" style={{ color: T.faint }}>+{money(delta)} retail markup</p>
@@ -872,17 +887,17 @@ function ToolCard({ tool }) {
             {buy ? "Buy" : "Rent"}
           </span>
         </div>
-        <div className="mt-2 flex items-center justify-between" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-          <span className="flex flex-col">
-            <span className="text-[10px] uppercase" style={{ color: T.faint }}>Budget</span>
-            <b className="text-sm" style={{ color: T.ink }}>{money(tool.budgetPrice)}</b>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="rounded p-2 border" style={{ borderColor: T.line, background: T.paper }}>
+            <span className="text-[10px] uppercase font-bold" style={{ color: T.faint }}>Budget</span>
+            <b className="block text-sm" style={{ color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }}>{money(tool.budgetPrice)}</b>
             <span className="text-[10px]" style={{ color: T.faint }}>@ {tool.budgetSupplier || "B&Q"}</span>
-          </span>
-          <span className="flex flex-col text-right">
-            <span className="text-[10px] uppercase" style={{ color: T.faint }}>Pro-grade</span>
-            <b className="text-sm" style={{ color: T.ink }}>{money(tool.proPrice)}</b>
+          </div>
+          <div className="rounded p-2 border" style={{ borderColor: T.line, background: T.paper }}>
+            <span className="text-[10px] uppercase font-bold" style={{ color: T.faint }}>Pro-grade</span>
+            <b className="block text-sm" style={{ color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }}>{money(tool.proPrice)}</b>
             <span className="text-[10px]" style={{ color: T.faint }}>@ {tool.proSupplier || "trade merchant"}</span>
-          </span>
+          </div>
         </div>
         {tool.rentPerDay ? (
           <p className="mt-1 text-xs" style={{ color: T.faint }}>
@@ -1068,7 +1083,7 @@ export default function DIYvsProDashboard() {
       {/* Masthead */}
       <header className="border-b" style={{ background: T.ink, borderColor: T.ink }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="rounded p-2" style={{ background: T.pro }}><Hammer size={18} color="white" /></div>
+          <div className="rounded p-2" style={{ background: T.pro }}><MjolnirIcon size={18} color="white" bg={T.pro} /></div>
           <div>
             <h1 className="text-lg font-black uppercase leading-tight text-white"
                 style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
