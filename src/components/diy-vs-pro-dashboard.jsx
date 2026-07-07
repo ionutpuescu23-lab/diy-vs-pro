@@ -200,6 +200,7 @@ function Panel({ title, icon: Icon, accent = T.blue, children, subtitle }) {
 
 function VisualAssessor({ onMaterials, onAnalysis }) {
   const [image, setImage] = useState(null);        // { data, mediaType, previewUrl }
+  const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -217,14 +218,18 @@ function VisualAssessor({ onMaterials, onAnalysis }) {
   };
 
   // Vision analysis: strict-JSON prompt so the response can drive the estimator.
+  // A photo, a description, or both are accepted — the API just needs at least one.
   const analyse = async () => {
-    if (!image) return;
+    if (!image && !description.trim()) return;
     setBusy(true); setError(""); setResult(null);
     try {
       const response = await fetch("/api/estimate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageData: image.data, mediaType: image.mediaType }),
+        body: JSON.stringify({
+          imageData: image?.data, mediaType: image?.mediaType,
+          description: description.trim(),
+        }),
       });
       const parsed = await response.json();
       if (!response.ok) throw new Error(parsed.error || "Analysis failed");
@@ -268,24 +273,36 @@ function VisualAssessor({ onMaterials, onAnalysis }) {
                  onChange={(e) => loadFile(e.target.files[0])} />
         </div>
 
+        <label className="block mt-3">
+          <span className="block text-xs mb-1" style={{ color: T.faint }}>
+            {image ? "Add extra detail (optional)" : "…or just describe the issue"}
+          </span>
+          <textarea
+            value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
+            placeholder="e.g. Damp patch on the north wall, musty smell, gets worse after heavy rain…"
+            className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line }}
+          />
+        </label>
+
         <button
-          onClick={analyse} disabled={!image || busy}
+          onClick={analyse} disabled={(!image && !description.trim()) || busy}
           className="mt-3 w-full rounded py-2.5 font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40"
           style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <ClipboardList size={16} />}
-          {busy ? "SURVEYING PHOTO…" : "IDENTIFY PROBLEM & BUILD FIX PLAN"}
+          {busy ? "SURVEYING…" : "IDENTIFY PROBLEM & BUILD FIX PLAN"}
         </button>
         {error && <p className="mt-2 text-xs" style={{ color: T.danger }}>{error}</p>}
       </Panel>
 
       {/* Diagnosis output */}
       <Panel title="Surveyor's Report" icon={HardHat}
-             subtitle={result ? `severity: ${result.severity}` : "awaiting photo"}>
+             subtitle={result ? `severity: ${result.severity}` : "awaiting photo or description"}>
         {!result && !busy && (
           <p className="text-sm" style={{ color: T.faint }}>
-            Upload a photo and the assessor will identify the issue, explain the root cause,
-            write a step-by-step fix guide and push the exact material list into the price engine.
+            Upload a photo, describe the issue in words, or both — the assessor will identify the issue,
+            explain the root cause, write a step-by-step fix guide and push the exact material list into
+            the price engine. A photo gives the most accurate diagnosis, but a good description works too.
           </p>
         )}
         {busy && <p className="text-sm animate-pulse" style={{ color: T.faint }}>Reading brickwork, moisture patterns, levels…</p>}

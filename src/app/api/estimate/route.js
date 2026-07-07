@@ -4,38 +4,30 @@
 
 export async function POST(request) {
   try {
-    // Frontend sends: { imageData: <base64 string>, mediaType: "image/jpeg" }
-    const { imageData, mediaType } = await request.json();
+    // Frontend sends: { imageData?: <base64 string>, mediaType?: "image/jpeg", description?: string }
+    // At least one of imageData / description must be present.
+    const { imageData, mediaType, description } = await request.json();
 
-    if (!imageData) {
-      return Response.json({ error: "No image provided" }, { status: 400 });
+    if (!imageData && !(description || "").trim()) {
+      return Response.json({ error: "Provide a photo, a description, or both" }, { status: 400 });
     }
 
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY, // server-side only, no NEXT_PUBLIC_
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 1500,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: mediaType || "image/jpeg",
-                  data: imageData,
-                },
-              },
-              {
-                type: "text",
-                text: `You are a UK building surveyor. Analyse this photo of a property/garden issue.
+    const instructions = imageData && description
+      ? `You are a UK building surveyor. Analyse this photo of a property/garden issue, using the homeowner's own description below for extra context (symptoms, timing, what they've already noticed).\n\nHomeowner's description: "${description}"`
+      : imageData
+      ? `You are a UK building surveyor. Analyse this photo of a property/garden issue.`
+      : `You are a UK building surveyor. A homeowner has described a property/garden issue but has not provided a photo. Diagnose it as best you can from the description alone, and be appropriately more cautious/conservative given the lack of visual confirmation.\n\nHomeowner's description: "${description}"`;
+
+    const content = [];
+    if (imageData) {
+      content.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType || "image/jpeg", data: imageData },
+      });
+    }
+    content.push({
+      type: "text",
+      text: `${instructions}
 Respond with ONLY a raw JSON object (no markdown, no backticks) with exactly these keys:
 {
  "issue": "short name of the physical problem",
@@ -48,10 +40,19 @@ Respond with ONLY a raw JSON object (no markdown, no backticks) with exactly the
  "steps": ["5-8 concise DIY fixing steps"],
  "materials": [{"name": "...", "qty": number, "unit": "bag|tub|roll|m2|litre|each", "budget": number, "high": number}]
 }`,
-              },
-            ],
-          },
-        ],
+    });
+
+    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY, // server-side only, no NEXT_PUBLIC_
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-5",
+        max_tokens: 1500,
+        messages: [{ role: "user", content }],
       }),
     });
 
