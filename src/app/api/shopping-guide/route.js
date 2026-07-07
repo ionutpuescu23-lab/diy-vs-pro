@@ -3,10 +3,19 @@
 // retail-vs-trade price gap actually buys, and (2) a tools-needed list with a
 // buy-vs-rent recommendation. No product photos or business names are involved
 // here — just pricing/quality guidance, so it's safe for Claude to generate directly.
+import { consumeAccess } from "@/lib/access";
 
 export async function POST(request) {
   try {
-    const { issue, trade, materials } = await request.json();
+    const { issue, trade, materials, deviceId } = await request.json();
+
+    if (!deviceId) {
+      return Response.json({ error: "Missing device ID" }, { status: 400 });
+    }
+    const access = await consumeAccess(deviceId);
+    if (!access.allowed) {
+      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
+    }
 
     const materialList = (materials || [])
       .map((m) => `${m.name} (qty ${m.qty} ${m.unit}, trade £${m.budget} / retail £${m.high})`)

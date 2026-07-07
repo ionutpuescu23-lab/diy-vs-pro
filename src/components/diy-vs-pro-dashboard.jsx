@@ -79,6 +79,11 @@ const TRADES = [
   { id: "gas",         name: "Gas Engineer (Gas Safe)",  rate: 300, regulated: true  },
 ];
 
+// Display-only copies of the free-trial/unlock constants enforced server-side
+// in src/lib/access.js — keep these in sync with that file.
+const FREE_TRIAL_USES_DISPLAY = 2;
+const UNLOCK_PRICE_DISPLAY = 4.99;
+
 // Starter material rows so the dashboard is useful before a photo is analysed.
 const STARTER_MATERIALS = [
   { id: 1, name: "Multi-finish plaster 25kg", qty: 4, unit: "bag",  budget: 9.5,  high: 14 },
@@ -198,7 +203,7 @@ function Panel({ title, icon: Icon, accent = T.blue, children, subtitle }) {
 
 /* ====================== MODULE A — VISUAL ASSESSOR ======================= */
 
-function VisualAssessor({ onMaterials, onAnalysis }) {
+function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange }) {
   const [image, setImage] = useState(null);        // { data, mediaType, previewUrl }
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -219,11 +224,15 @@ function VisualAssessor({ onMaterials, onAnalysis }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageData: image.data, mediaType: image.mediaType,
-          issue: result.issue, rootCause: result.rootCause,
+          issue: result.issue, rootCause: result.rootCause, deviceId,
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Mockup generation failed");
+      onAccessChange?.();
+      if (!response.ok) {
+        if (onPaywall?.(response)) return;
+        throw new Error(data.error || "Mockup generation failed");
+      }
       setMockupImage(data.image);
     } catch (e) {
       setMockupError(e.message || "Couldn't generate a mockup — try again.");
@@ -253,11 +262,15 @@ function VisualAssessor({ onMaterials, onAnalysis }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageData: image?.data, mediaType: image?.mediaType,
-          description: description.trim(),
+          description: description.trim(), deviceId,
         }),
       });
       const parsed = await response.json();
-      if (!response.ok) throw new Error(parsed.error || "Analysis failed");
+      onAccessChange?.();
+      if (!response.ok) {
+        if (onPaywall?.(response)) return;
+        throw new Error(parsed.error || "Analysis failed");
+      }
       setResult(parsed);
       onAnalysis(parsed);                                   // feeds labour tab + verdict safety flag
       onMaterials(                                          // feeds material engine
@@ -653,7 +666,7 @@ function DecisionMatrix({ diy, pro, verdict, timeValue, setTimeValue, diyHours, 
 
 const SEVERITIES = ["low", "medium", "high"];
 
-function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims, setRoomDims }) {
+function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims, setRoomDims, deviceId, onPaywall, onAccessChange }) {
   const [severity, setSeverity] = useState(analysis?.severity || "medium");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -684,10 +697,14 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
       const response = await fetch("/api/measure-room", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageData: measurePhoto.data, mediaType: measurePhoto.mediaType, referenceObject: refObject }),
+        body: JSON.stringify({ imageData: measurePhoto.data, mediaType: measurePhoto.mediaType, referenceObject: refObject, deviceId }),
       });
       const parsed = await response.json();
-      if (!response.ok) throw new Error(parsed.error || "Estimate failed");
+      onAccessChange?.();
+      if (!response.ok) {
+        if (onPaywall?.(response)) return;
+        throw new Error(parsed.error || "Estimate failed");
+      }
       setRoomDims({ length: parsed.widthM, width: parsed.heightM });
       setMeasureResult({ confidence: parsed.confidence, notes: parsed.notes });
     } catch (e) {
@@ -710,11 +727,15 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
           issue: analysis?.issue, rootCause: analysis?.rootCause,
           severity, trade: trade.name, regulated: trade.regulated || analysis?.regulated === true,
           roomLength: roomDims.length, roomWidth: roomDims.width,
-          materials, postcode: labour.postcode, regionArea: region.area,
+          materials, postcode: labour.postcode, regionArea: region.area, deviceId,
         }),
       });
       const parsed = await response.json();
-      if (!response.ok) throw new Error(parsed.error || "Guide generation failed");
+      onAccessChange?.();
+      if (!response.ok) {
+        if (onPaywall?.(response)) return;
+        throw new Error(parsed.error || "Guide generation failed");
+      }
       setGuide(parsed);
     } catch (e) {
       setError("Couldn't generate the guide — try again in a moment.");
@@ -1063,7 +1084,7 @@ function ToolCard({ tool }) {
   );
 }
 
-function MaterialsToolsGuide({ materials, tier, analysis, trade }) {
+function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPaywall, onAccessChange }) {
   const [tools, setTools] = useState(STARTER_TOOLS);
   const [notes, setNotes] = useState({});
   const [busy, setBusy] = useState(false);
@@ -1079,10 +1100,15 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade }) {
         body: JSON.stringify({
           issue: analysis?.issue, trade: trade.name,
           materials: materials.map((m) => ({ name: m.name, qty: m.qty, unit: m.unit, budget: m.budget, high: m.high })),
+          deviceId,
         }),
       });
       const parsed = await response.json();
-      if (!response.ok) throw new Error(parsed.error || "Guide generation failed");
+      onAccessChange?.();
+      if (!response.ok) {
+        if (onPaywall?.(response)) return;
+        throw new Error(parsed.error || "Guide generation failed");
+      }
       const noteMap = {};
       (parsed.materialNotes || []).forEach((n) => { noteMap[n.name] = n; });
       setNotes(noteMap);
@@ -1170,6 +1196,63 @@ export default function DIYvsProDashboard() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
+
+  /* ---------------------- free trial / unlock paywall ----------------------
+     A per-browser device ID (localStorage) tracks a shared free-trial pool
+     across every AI-costing action. Real enforcement happens server-side in
+     each route (see src/lib/access.js) — this is just the UI reflecting that
+     state and offering the one-time unlock when the trial runs out. */
+  const [deviceId, setDeviceId] = useState(null);
+  const [access, setAccess] = useState(null); // { unlocked, trial_uses_remaining, configured }
+  const [showUnlock, setShowUnlock] = useState(false);
+  const [unlockBusy, setUnlockBusy] = useState(false);
+  const [unlockError, setUnlockError] = useState("");
+  const [unlockBanner, setUnlockBanner] = useState(null); // "success" | "cancelled" | null
+
+  useEffect(() => {
+    let id = window.localStorage.getItem("diyvspro_device_id");
+    if (!id) { id = crypto.randomUUID(); window.localStorage.setItem("diyvspro_device_id", id); }
+    setDeviceId(id);
+
+    const status = new URLSearchParams(window.location.search).get("unlock");
+    if (status === "success" || status === "cancelled") {
+      setUnlockBanner(status);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  const refreshAccess = (id) => {
+    fetch(`/api/access?deviceId=${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then(setAccess)
+      .catch(() => {});
+  };
+
+  useEffect(() => { if (deviceId) refreshAccess(deviceId); }, [deviceId, unlockBanner]);
+
+  // Passed down to every AI-costing tab: call after a fetch response comes
+  // back so a 402 (trial exhausted) pops the paywall instead of a generic error.
+  const handlePaywall = (response) => {
+    if (response.status === 402) { setShowUnlock(true); return true; }
+    return false;
+  };
+
+  const handleUnlock = async () => {
+    setUnlockBusy(true); setUnlockError("");
+    try {
+      const response = await fetch("/api/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Couldn't start checkout");
+      window.location.href = data.url;
+    } catch (e) {
+      setUnlockError(e.message || "Couldn't start checkout — try again.");
+      setUnlockBusy(false);
+    }
+  };
 
   const handleDonate = async () => {
     setDonateBusy(true); setDonateError("");
@@ -1315,6 +1398,20 @@ export default function DIYvsProDashboard() {
                            fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
             {verdict.diyWins ? `DIY saves ${money(saving)}` : safetyForced ? "Pro required" : `Pro saves ${money(saving)}`}
           </button>
+          {access?.configured && !access.unlocked && (
+            <button onClick={() => setShowUnlock(true)}
+                    className="rounded px-3 py-1.5 text-xs font-bold uppercase"
+                    style={{ background: T.pro, color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
+              {num(access.trial_uses_remaining) > 0
+                ? `${access.trial_uses_remaining} free ${access.trial_uses_remaining === 1 ? "use" : "uses"} left`
+                : "Unlock full access"}
+            </button>
+          )}
+          {access?.configured && access?.unlocked && (
+            <span className="rounded px-3 py-1.5 text-xs font-bold uppercase" style={{ background: T.diySoft, color: T.diy }}>
+              ✓ Unlocked
+            </span>
+          )}
           <button onClick={() => setShowDonate(true)}
                   className="rounded px-3 py-1.5 text-xs font-bold uppercase border"
                   style={{ borderColor: "#3A4A5C", color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
@@ -1350,8 +1447,21 @@ export default function DIYvsProDashboard() {
             <button onClick={() => setDonationBanner(null)} aria-label="Dismiss">✕</button>
           </div>
         )}
+        {unlockBanner && (
+          <div className="mb-4 rounded-lg p-3 text-sm font-semibold flex items-center justify-between"
+               style={{ background: unlockBanner === "success" ? T.diySoft : T.proSoft,
+                        color: unlockBanner === "success" ? T.diy : T.pro }}>
+            <span>
+              {unlockBanner === "success"
+                ? "Unlocked! Thanks for your purchase — enjoy unlimited access. 🎉"
+                : "Purchase cancelled — no charge was made."}
+            </span>
+            <button onClick={() => setUnlockBanner(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
         {tab === "assess" && (
           <VisualAssessor
+            deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
             onAnalysis={(a) => {
               setAnalysis(a);
               // Auto-configure labour from the surveyor's report
@@ -1378,10 +1488,12 @@ export default function DIYvsProDashboard() {
         {tab === "guide" && (
           <StepByStepGuide analysis={analysis} materials={materials} trade={trade}
                             region={region} labour={labour}
-                            roomDims={roomDims} setRoomDims={setRoomDims} />
+                            roomDims={roomDims} setRoomDims={setRoomDims}
+                            deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
         )}
         {tab === "shopping" && (
-          <MaterialsToolsGuide materials={materials} tier={tier} analysis={analysis} trade={trade} />
+          <MaterialsToolsGuide materials={materials} tier={tier} analysis={analysis} trade={trade}
+                                deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
         )}
       </main>
 
@@ -1431,6 +1543,38 @@ export default function DIYvsProDashboard() {
                       className="flex-1 rounded py-2.5 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
                       style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
                 {donateBusy ? <Loader2 size={16} className="animate-spin" /> : "☕"} Donate {money(donateAmount)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unlock modal — free trial exhausted, one-time payment for unlimited access */}
+      {showUnlock && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(22,33,46,0.55)" }}
+             onClick={() => !unlockBusy && setShowUnlock(false)}>
+          <div className="rounded-lg w-full max-w-sm p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
+            <Eyebrow color={T.pro}>Free trial used up</Eyebrow>
+            <p className="mt-1 text-sm" style={{ color: T.ink }}>
+              You've used your {FREE_TRIAL_USES_DISPLAY} free AI look-ups (photo analysis, guides, and material
+              lookups). Unlock unlimited access with a one-time payment — no subscription, no recurring charge.
+            </p>
+            <div className="mt-3 rounded-lg border p-3 flex items-center justify-between" style={{ borderColor: T.line, background: T.paper }}>
+              <span className="text-sm font-semibold" style={{ color: T.ink }}>Unlock unlimited access</span>
+              <span className="text-lg font-black" style={{ color: T.pro, fontFamily: "'Archivo', sans-serif" }}>
+                {money(UNLOCK_PRICE_DISPLAY)}
+              </span>
+            </div>
+            {unlockError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{unlockError}</p>}
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setShowUnlock(false)} disabled={unlockBusy}
+                      className="flex-1 rounded py-2.5 text-sm font-bold" style={{ color: T.faint, background: T.paper }}>
+                Not now
+              </button>
+              <button onClick={handleUnlock} disabled={unlockBusy}
+                      className="flex-1 rounded py-2.5 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
+                      style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
+                {unlockBusy ? <Loader2 size={16} className="animate-spin" /> : "🔓"} Unlock {money(UNLOCK_PRICE_DISPLAY)}
               </button>
             </div>
           </div>

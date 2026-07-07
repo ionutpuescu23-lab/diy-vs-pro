@@ -1,15 +1,24 @@
 // src/app/api/estimate/route.js
 // App Router rule: folder = URL, file MUST be named route.js,
 // and the export MUST be named after the HTTP method (POST).
+import { consumeAccess } from "@/lib/access";
 
 export async function POST(request) {
   try {
-    // Frontend sends: { imageData?: <base64 string>, mediaType?: "image/jpeg", description?: string }
+    // Frontend sends: { imageData?: <base64 string>, mediaType?: "image/jpeg", description?: string, deviceId }
     // At least one of imageData / description must be present.
-    const { imageData, mediaType, description } = await request.json();
+    const { imageData, mediaType, description, deviceId } = await request.json();
 
     if (!imageData && !(description || "").trim()) {
       return Response.json({ error: "Provide a photo, a description, or both" }, { status: 400 });
+    }
+
+    if (!deviceId) {
+      return Response.json({ error: "Missing device ID" }, { status: 400 });
+    }
+    const access = await consumeAccess(deviceId);
+    if (!access.allowed) {
+      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
     }
 
     const instructions = imageData && description

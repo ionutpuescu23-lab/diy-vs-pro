@@ -4,6 +4,8 @@
 // a rough estimate (perspective, camera angle, and framing all affect
 // accuracy) — not a substitute for a tape measure — so the response always
 // carries a confidence level and caveats for the UI to surface honestly.
+import { consumeAccess } from "@/lib/access";
+
 const REFERENCE_SIZES = {
   a4: "an A4 sheet of paper (210mm x 297mm)",
   card: "a credit/debit card (85.6mm x 54mm, ISO ID-1 size)",
@@ -11,10 +13,18 @@ const REFERENCE_SIZES = {
 
 export async function POST(request) {
   try {
-    const { imageData, mediaType, referenceObject } = await request.json();
+    const { imageData, mediaType, referenceObject, deviceId } = await request.json();
 
     if (!imageData) {
       return Response.json({ error: "No photo provided" }, { status: 400 });
+    }
+
+    if (!deviceId) {
+      return Response.json({ error: "Missing device ID" }, { status: 400 });
+    }
+    const access = await consumeAccess(deviceId);
+    if (!access.allowed) {
+      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
     }
 
     const refDesc = REFERENCE_SIZES[referenceObject] || REFERENCE_SIZES.a4;

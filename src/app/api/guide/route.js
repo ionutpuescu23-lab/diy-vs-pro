@@ -4,6 +4,7 @@
 // invent business names/phone numbers for a given postcode, which is a hallucination
 // risk. Instead we return the official UK regulator/trade-body directories (real,
 // stable URLs) and tell the user to search them by their own postcode.
+import { consumeAccess } from "@/lib/access";
 
 const TRADE_DIRECTORIES = {
   "Gas Engineer (Gas Safe)": [
@@ -41,8 +42,16 @@ export async function POST(request) {
   try {
     const {
       issue, rootCause, severity, trade, regulated,
-      roomLength, roomWidth, materials, postcode, regionArea,
+      roomLength, roomWidth, materials, postcode, regionArea, deviceId,
     } = await request.json();
+
+    if (!deviceId) {
+      return Response.json({ error: "Missing device ID" }, { status: 400 });
+    }
+    const access = await consumeAccess(deviceId);
+    if (!access.allowed) {
+      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
+    }
 
     const roomArea = (parseFloat(roomLength) || 0) * (parseFloat(roomWidth) || 0);
     const materialList = (materials || [])

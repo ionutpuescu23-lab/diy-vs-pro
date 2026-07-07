@@ -4,12 +4,22 @@
 // real money per call (unlike Claude's per-token pricing), so this defaults
 // to "low" quality to keep per-generation cost down — it's a bonus visual,
 // not a core feature.
+import { consumeAccess } from "@/lib/access";
+
 export async function POST(request) {
   try {
-    const { imageData, mediaType, issue, rootCause } = await request.json();
+    const { imageData, mediaType, issue, rootCause, deviceId } = await request.json();
 
     if (!imageData) {
       return Response.json({ error: "No photo provided" }, { status: 400 });
+    }
+
+    if (!deviceId) {
+      return Response.json({ error: "Missing device ID" }, { status: 400 });
+    }
+    const access = await consumeAccess(deviceId);
+    if (!access.allowed) {
+      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
