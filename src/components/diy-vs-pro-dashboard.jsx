@@ -6,7 +6,7 @@ import {
   CheckCircle2, Loader2, Plus, Trash2, Scale, ClipboardList, PoundSterling,
   ListChecks, Clock, ShieldAlert, PhoneCall, ExternalLink, Ruler,
   Package, Layers, Droplets, Wrench, Scissors, PaintBucket, ShoppingCart,
-  Boxes, Drill, Plug, Fan, Gauge, Info
+  Boxes, Drill, Plug, Fan, Gauge, Info, MessageSquare, Star
 } from "lucide-react";
 
 /* =========================================================================
@@ -1005,6 +1005,71 @@ export default function DIYvsProDashboard() {
   const [analysis, setAnalysis] = useState(null);   // last vision result (safety flag lives here)
   const [roomDims, setRoomDims] = useState({ length: 4, width: 3 });
   const [bgImage, setBgImage] = useState(null);     // ambient background photo — purely decorative
+  const [showDonate, setShowDonate] = useState(false);
+  const [donateAmount, setDonateAmount] = useState(5);
+  const [donateBusy, setDonateBusy] = useState(false);
+  const [donateError, setDonateError] = useState("");
+  const [donationBanner, setDonationBanner] = useState(null); // "success" | "cancelled" | null, from the post-checkout redirect
+
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get("donation");
+    if (status === "success" || status === "cancelled") {
+      setDonationBanner(status);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  const handleDonate = async () => {
+    setDonateBusy(true); setDonateError("");
+    try {
+      const response = await fetch("/api/donate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: donateAmount }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Couldn't start checkout");
+      window.location.href = data.url;
+    } catch (e) {
+      setDonateError(e.message || "Couldn't start checkout — try again.");
+      setDonateBusy(false);
+    }
+  };
+
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackEase, setFeedbackEase] = useState(0);
+  const [feedbackImprovements, setFeedbackImprovements] = useState("");
+  const [feedbackComments, setFeedbackComments] = useState("");
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
+  const handleFeedback = async () => {
+    setFeedbackBusy(true); setFeedbackError("");
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          easeOfUse: feedbackEase || null,
+          improvements: feedbackImprovements,
+          comments: feedbackComments,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Couldn't save feedback");
+      setFeedbackSent(true);
+    } catch (e) {
+      setFeedbackError(e.message || "Couldn't save feedback — try again.");
+    } finally {
+      setFeedbackBusy(false);
+    }
+  };
+
+  const closeFeedback = () => {
+    setShowFeedback(false);
+    setFeedbackSent(false); setFeedbackEase(0); setFeedbackImprovements(""); setFeedbackComments(""); setFeedbackError("");
+  };
 
   // One-off ambient background photo so the app reads as a premium property tool
   // rather than a bare spreadsheet. Purely decorative: fails silently to the flat
@@ -1098,6 +1163,11 @@ export default function DIYvsProDashboard() {
                            fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
             {verdict.diyWins ? `DIY saves ${money(saving)}` : safetyForced ? "Pro required" : `Pro saves ${money(saving)}`}
           </button>
+          <button onClick={() => setShowDonate(true)}
+                  className="rounded px-3 py-1.5 text-xs font-bold uppercase border"
+                  style={{ borderColor: "#3A4A5C", color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
+            ☕ Support
+          </button>
         </div>
         {/* Tab bar */}
         <nav className="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto">
@@ -1116,6 +1186,18 @@ export default function DIYvsProDashboard() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-5">
+        {donationBanner && (
+          <div className="mb-4 rounded-lg p-3 text-sm font-semibold flex items-center justify-between"
+               style={{ background: donationBanner === "success" ? T.diySoft : T.proSoft,
+                        color: donationBanner === "success" ? T.diy : T.pro }}>
+            <span>
+              {donationBanner === "success"
+                ? "Thank you — your support genuinely helps keep this tool running! ☕"
+                : "Donation cancelled — no charge was made."}
+            </span>
+            <button onClick={() => setDonationBanner(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
         {tab === "assess" && (
           <VisualAssessor
             onAnalysis={(a) => {
@@ -1151,9 +1233,119 @@ export default function DIYvsProDashboard() {
         )}
       </main>
 
-      <footer className="max-w-6xl mx-auto px-4 pb-6 text-xs" style={{ color: T.faint }}>
-        Estimates only — always confirm regulated work (gas, consumer units, structural) with certified trades.
+      <footer className="max-w-6xl mx-auto px-4 pb-6 text-xs flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: T.faint }}>
+        <span>Estimates only — always confirm regulated work (gas, consumer units, structural) with certified trades.</span>
+        <button onClick={() => setShowFeedback(true)} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
+          <MessageSquare size={12} /> Give feedback
+        </button>
       </footer>
+
+      {/* Donation modal — flexible one-off "support this tool" payment via Stripe Checkout */}
+      {showDonate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(22,33,46,0.55)" }}
+             onClick={() => !donateBusy && setShowDonate(false)}>
+          <div className="rounded-lg w-full max-w-sm p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
+            <Eyebrow>Support DIY vs PRO</Eyebrow>
+            <p className="mt-1 text-sm" style={{ color: T.ink }}>
+              This tool is free to use. If it saved you money or hassle, a small one-off donation helps cover the
+              AI/photo costs and keeps it maintained.
+            </p>
+            <div className="mt-3 flex gap-2">
+              {[3, 5, 10].map((amt) => (
+                <button key={amt} onClick={() => setDonateAmount(amt)}
+                        className="flex-1 rounded py-2 text-sm font-bold border"
+                        style={{ borderColor: donateAmount === amt ? T.blue : T.line,
+                                 background: donateAmount === amt ? "#EDF3F9" : "white", color: T.ink }}>
+                  {money(amt)}
+                </button>
+              ))}
+            </div>
+            <label className="block mt-3">
+              <span className="block text-xs mb-1" style={{ color: T.faint }}>Or enter a custom amount</span>
+              <div className="flex items-center rounded border bg-white overflow-hidden" style={{ borderColor: T.line }}>
+                <span className="px-2 text-sm" style={{ color: T.faint }}>£</span>
+                <input type="number" min="1" step="1" value={donateAmount}
+                       onChange={(e) => setDonateAmount(Math.max(1, num(e.target.value)))}
+                       className="w-full px-2 py-1.5 text-sm outline-none" style={{ fontFamily: "'IBM Plex Mono', monospace" }} />
+              </div>
+            </label>
+            {donateError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{donateError}</p>}
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setShowDonate(false)} disabled={donateBusy}
+                      className="flex-1 rounded py-2.5 text-sm font-bold" style={{ color: T.faint, background: T.paper }}>
+                Cancel
+              </button>
+              <button onClick={handleDonate} disabled={donateBusy}
+                      className="flex-1 rounded py-2.5 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
+                      style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
+                {donateBusy ? <Loader2 size={16} className="animate-spin" /> : "☕"} Donate {money(donateAmount)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback modal — ease-of-use rating + free-text improvements/comments, stored in Postgres */}
+      {showFeedback && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(22,33,46,0.55)" }}
+             onClick={() => !feedbackBusy && closeFeedback()}>
+          <div className="rounded-lg w-full max-w-sm p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
+            {feedbackSent ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={20} style={{ color: T.diy }} />
+                  <Eyebrow color={T.diy}>Thank you!</Eyebrow>
+                </div>
+                <p className="mt-2 text-sm" style={{ color: T.ink }}>Your feedback helps make this tool better for the next person.</p>
+                <button onClick={closeFeedback} className="mt-4 w-full rounded py-2.5 text-sm font-bold text-white"
+                        style={{ background: T.blue, fontFamily: "'Archivo', sans-serif" }}>
+                  Close
+                </button>
+              </>
+            ) : (
+              <>
+                <Eyebrow>Give feedback</Eyebrow>
+                <p className="mt-1 text-sm" style={{ color: T.ink }}>How did using DIY vs PRO go?</p>
+
+                <p className="block text-xs mt-3 mb-1" style={{ color: T.faint }}>How easy was it to use?</p>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} onClick={() => setFeedbackEase(n)} aria-label={`${n} out of 5`}>
+                      <Star size={26} fill={n <= feedbackEase ? T.pro : "none"} style={{ color: T.pro }} />
+                    </button>
+                  ))}
+                </div>
+
+                <label className="block mt-3">
+                  <span className="block text-xs mb-1" style={{ color: T.faint }}>What could we improve?</span>
+                  <textarea value={feedbackImprovements} onChange={(e) => setFeedbackImprovements(e.target.value)}
+                            rows={2} className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line }} />
+                </label>
+
+                <label className="block mt-3">
+                  <span className="block text-xs mb-1" style={{ color: T.faint }}>Additional comments</span>
+                  <textarea value={feedbackComments} onChange={(e) => setFeedbackComments(e.target.value)}
+                            rows={2} className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line }} />
+                </label>
+
+                {feedbackError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{feedbackError}</p>}
+
+                <div className="mt-4 flex gap-2">
+                  <button onClick={closeFeedback} disabled={feedbackBusy}
+                          className="flex-1 rounded py-2.5 text-sm font-bold" style={{ color: T.faint, background: T.paper }}>
+                    Cancel
+                  </button>
+                  <button onClick={handleFeedback} disabled={feedbackBusy}
+                          className="flex-1 rounded py-2.5 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
+                          style={{ background: T.blue, fontFamily: "'Archivo', sans-serif" }}>
+                    {feedbackBusy ? <Loader2 size={16} className="animate-spin" /> : "Submit"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
