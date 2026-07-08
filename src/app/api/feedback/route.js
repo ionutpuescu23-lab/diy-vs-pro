@@ -1,8 +1,9 @@
 // src/app/api/feedback/route.js
 // Stores user feedback (ease-of-use rating, improvement ideas, comments) in
-// Postgres via Neon's serverless driver. Auto-creates the table on first use
-// so no separate migration step is needed for a table this small.
-import { neon } from "@neondatabase/serverless";
+// Postgres via a generic client (works with Supabase, Neon, or any standard
+// Postgres provider). Auto-creates the table on first use so no separate
+// migration step is needed for a table this small.
+import postgres from "postgres";
 
 export async function POST(request) {
   try {
@@ -13,7 +14,7 @@ export async function POST(request) {
       return Response.json({ error: "Feedback storage isn't configured yet" }, { status: 500 });
     }
 
-    const sql = neon(connStr);
+    const sql = postgres(connStr, { ssl: "require", prepare: false });
     await sql`
       CREATE TABLE IF NOT EXISTS feedback (
         id SERIAL PRIMARY KEY,

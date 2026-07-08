@@ -8,15 +8,28 @@
 //
 // Fails OPEN if DATABASE_URL isn't configured yet, so the app keeps working
 // (ungated) during setup rather than breaking outright.
-import { neon } from "@neondatabase/serverless";
+//
+// Uses the generic `postgres` client (not a Neon-specific driver) so this
+// works with any standard Postgres provider — Supabase, Neon, RDS, etc.
+// DATABASE_URL must be an actual connection string (postgresql://user:pass@host/db),
+// not a provider dashboard/project URL.
+import postgres from "postgres";
 
 export const FREE_TRIAL_USES = 2; // keep in sync with the DEFAULT below
 export const UNLOCK_PRICE_GBP = 4.99;
 
+let cachedSql = null;
+
 function getSql() {
   const connStr = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!connStr) return null;
-  return neon(connStr);
+  if (!cachedSql) {
+    // prepare: false — required for poolers running in transaction mode
+    // (e.g. Supabase's pgbouncer on port 6543), which don't support
+    // server-side prepared statements across pooled connections.
+    cachedSql = postgres(connStr, { ssl: "require", prepare: false });
+  }
+  return cachedSql;
 }
 
 async function ensureTable(sql) {
