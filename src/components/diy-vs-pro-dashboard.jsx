@@ -1480,6 +1480,37 @@ export default function DIYvsProDashboard() {
     }
   };
 
+  // Mini admin panel — only reachable via the header badge, which only
+  // renders when access.is_admin is already true. Every action still goes
+  // through /api/admin/manage, which re-checks admin status server-side
+  // against deviceId rather than trusting this component's state.
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminTargetId, setAdminTargetId] = useState("");
+  const [adminLookup, setAdminLookup] = useState(null);
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [adminError, setAdminError] = useState("");
+
+  const adminAction = async (action) => {
+    const targetDeviceId = adminTargetId.trim();
+    if (!targetDeviceId) { setAdminError("Enter a device ID first."); return; }
+    setAdminBusy(true); setAdminError("");
+    try {
+      const response = await fetch("/api/admin/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callerDeviceId: deviceId, targetDeviceId, action }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Action failed");
+      setAdminLookup(data);
+      if (targetDeviceId === deviceId) refreshAccess(deviceId);
+    } catch (e) {
+      setAdminError(e.message || "Action failed — try again.");
+    } finally {
+      setAdminBusy(false);
+    }
+  };
+
   // Passed down to every AI-costing tab: call after a fetch response comes
   // back so a 402 (trial exhausted) pops the paywall instead of a generic error.
   const handlePaywall = (response) => {
@@ -1649,9 +1680,10 @@ export default function DIYvsProDashboard() {
             {verdict.diyWins ? `DIY saves ${money(saving)}` : safetyForced ? "Pro required" : `Pro saves ${money(saving)}`}
           </button>
           {access?.configured && access?.is_admin && (
-            <span className="rounded px-3 py-1.5 text-xs font-bold uppercase" style={{ background: T.amberSoft, color: T.amber }}>
+            <button onClick={() => setShowAdminPanel(true)}
+                    className="rounded px-3 py-1.5 text-xs font-bold uppercase" style={{ background: T.amberSoft, color: T.amber }}>
               ★ Admin
-            </span>
+            </button>
           )}
           {access?.configured && !access.is_admin && !access.unlocked && (
             <button onClick={() => setShowUnlock(true)}
@@ -1855,6 +1887,78 @@ export default function DIYvsProDashboard() {
                 {unlockBusy ? <Loader2 size={16} className="animate-spin" /> : "🔓"} Unlock {money(UNLOCK_PRICE_DISPLAY)}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin panel — look up any device's access state, grant/revoke admin,
+          main-unlock, or Design Studio unlock. Only reachable via the header
+          badge, which only renders for devices that are already admins. */}
+      {showAdminPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(22,33,46,0.55)" }}
+             onClick={() => !adminBusy && setShowAdminPanel(false)}>
+          <div className="rounded-lg w-full max-w-md p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
+            <Eyebrow color={T.amber}>Admin panel</Eyebrow>
+            <p className="mt-1 text-xs" style={{ color: T.faint }}>
+              Your device ID: <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.ink }}>{deviceId}</span>
+            </p>
+
+            <label className="block mt-3">
+              <span className="block text-xs mb-1" style={{ color: T.faint }}>Target device ID</span>
+              <input value={adminTargetId} onChange={(e) => setAdminTargetId(e.target.value)}
+                     placeholder="paste a device's diyvspro_device_id"
+                     className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                     style={{ borderColor: T.line, background: T.inputBg, color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }} />
+            </label>
+
+            <button onClick={() => adminAction("lookup")} disabled={adminBusy}
+                    className="mt-2 rounded py-1.5 px-3 text-xs font-bold disabled:opacity-40"
+                    style={{ background: T.inputBg, color: T.ink, border: `1px solid ${T.line}` }}>
+              Look up
+            </button>
+
+            {adminLookup && (
+              <div className="mt-3 rounded-lg border p-3 text-xs space-y-1" style={{ borderColor: T.line, background: T.paper, color: T.ink }}>
+                <p>Trial uses remaining: <b>{adminLookup.trial_uses_remaining ?? "—"}</b></p>
+                <p>Main unlock: <b style={{ color: adminLookup.unlocked ? T.diy : T.faint }}>{adminLookup.unlocked ? "unlocked" : "not unlocked"}</b></p>
+                <p>Design Studio: <b style={{ color: adminLookup.architecture_unlocked ? T.diy : T.faint }}>{adminLookup.architecture_unlocked ? "unlocked" : "not unlocked"}</b></p>
+                <p>Admin: <b style={{ color: adminLookup.is_admin ? T.amber : T.faint }}>{adminLookup.is_admin ? "yes" : "no"}</b></p>
+              </div>
+            )}
+
+            {adminError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{adminError}</p>}
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={() => adminAction("grantUnlock")} disabled={adminBusy}
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.diySoft, color: T.diy }}>
+                Grant unlock
+              </button>
+              <button onClick={() => adminAction("revokeUnlock")} disabled={adminBusy}
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.inputBg, color: T.faint }}>
+                Revoke unlock
+              </button>
+              <button onClick={() => adminAction("grantArchitecture")} disabled={adminBusy}
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.diySoft, color: T.diy }}>
+                Grant Design Studio
+              </button>
+              <button onClick={() => adminAction("revokeArchitecture")} disabled={adminBusy}
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.inputBg, color: T.faint }}>
+                Revoke Design Studio
+              </button>
+              <button onClick={() => adminAction("grantAdmin")} disabled={adminBusy}
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.amberSoft, color: T.amber }}>
+                Grant admin
+              </button>
+              <button onClick={() => adminAction("revokeAdmin")} disabled={adminBusy}
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.dangerSoft, color: T.danger }}>
+                Revoke admin
+              </button>
+            </div>
+
+            <button onClick={() => setShowAdminPanel(false)} disabled={adminBusy}
+                    className="mt-4 w-full rounded py-2.5 text-sm font-bold" style={{ color: T.faint, background: T.paper }}>
+              Close
+            </button>
           </div>
         </div>
       )}

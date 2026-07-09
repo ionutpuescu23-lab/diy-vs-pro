@@ -155,3 +155,45 @@ export async function setAdminFlag(deviceId, isAdmin) {
   `;
   return { ok: true, state: rows[0] };
 }
+
+// Fresh, server-side check of whether a device currently has admin rights —
+// used by /api/admin/manage to authorize every request. Never trust a
+// client-supplied "I'm an admin" claim; always re-check against the DB.
+export async function isDeviceAdmin(deviceId) {
+  const sql = getSql();
+  if (!sql) return false;
+  await ensureTable(sql);
+  const rows = await sql`SELECT is_admin FROM device_access WHERE device_id = ${deviceId}`;
+  return !!rows[0]?.is_admin;
+}
+
+// Admin-panel comp/revoke of the main unlock — distinct from markUnlocked
+// (which records a real Stripe session), since these grants have no payment
+// behind them.
+export async function setUnlockedFlag(deviceId, unlocked) {
+  const sql = getSql();
+  if (!sql) return { ok: false, reason: "not_configured" };
+  await ensureTable(sql);
+  await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
+  const rows = await sql`
+    UPDATE device_access SET unlocked = ${unlocked}
+    WHERE device_id = ${deviceId}
+    RETURNING device_id, unlocked
+  `;
+  return { ok: true, state: rows[0] };
+}
+
+// Admin-panel comp/revoke of the Design Studio unlock — same rationale as
+// setUnlockedFlag above.
+export async function setArchitectureFlag(deviceId, unlocked) {
+  const sql = getSql();
+  if (!sql) return { ok: false, reason: "not_configured" };
+  await ensureTable(sql);
+  await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
+  const rows = await sql`
+    UPDATE device_access SET architecture_unlocked = ${unlocked}
+    WHERE device_id = ${deviceId}
+    RETURNING device_id, architecture_unlocked
+  `;
+  return { ok: true, state: rows[0] };
+}
