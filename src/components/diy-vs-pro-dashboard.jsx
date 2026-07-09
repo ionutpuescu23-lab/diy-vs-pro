@@ -1196,7 +1196,7 @@ function SpecRow({ label, children }) {
   );
 }
 
-function DesignStudio({ deviceId, onPaywall, onAccessChange }) {
+function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock, unlockBusy, unlockError }) {
   const [shape, setShape] = useState("rectangular");
   const [sizeM2, setSizeM2] = useState(120);
   const [storeys, setStoreys] = useState(2);
@@ -1218,6 +1218,7 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange }) {
       const parsed = await response.json();
       onAccessChange?.();
       if (!response.ok) {
+        if (parsed.architecturePaywall) throw new Error("Design Studio isn't unlocked on this device yet.");
         if (onPaywall?.(response)) return;
         throw new Error(parsed.error || "Design generation failed");
       }
@@ -1229,7 +1230,28 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {!unlocked && (
+        <div className="absolute inset-0 z-10 rounded-xl flex flex-col items-center justify-center p-6 text-center backdrop-blur-md"
+             style={{ background: "rgba(11,13,16,0.6)", border: `1px solid ${T.line}` }}>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+               style={{ background: "rgba(96,165,250,0.12)", border: `1px solid ${T.blue}` }}>
+            <Sparkles size={22} style={{ color: T.blue }} />
+          </div>
+          <h3 className="text-base font-bold" style={{ color: T.ink, fontFamily: "'Archivo', sans-serif" }}>AI Design Studio</h3>
+          <p className="text-xs mt-1 mb-4 max-w-xs" style={{ color: T.faint }}>
+            Generate an AI structural concept spec and exterior render mapped to your house's shape, size and style.
+            A one-time unlock, separate from the main free trial.
+          </p>
+          <button onClick={onUnlock} disabled={unlockBusy}
+                  className="rounded-lg py-2 px-4 font-bold text-xs text-white disabled:opacity-40"
+                  style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
+            {unlockBusy ? "REDIRECTING…" : "UNLOCK DESIGN STUDIO • £4.99"}
+          </button>
+          {unlockError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{unlockError}</p>}
+        </div>
+      )}
+      <div className={`space-y-4 ${!unlocked ? "opacity-30 pointer-events-none select-none" : ""}`}>
       <Panel title="Design Studio" icon={Building2}
              subtitle="house brief -> AI structural concept + generated render">
         <p className="text-sm" style={{ color: T.ink }}>
@@ -1349,6 +1371,7 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange }) {
           </Panel>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -1416,6 +1439,21 @@ export default function DIYvsProDashboard() {
     }
   }, []);
 
+  // Design Studio's own one-time unlock — separate purchase from the main
+  // trial/unlock above, tracked via the same access-state row's
+  // architecture_unlocked column.
+  const [archUnlockBusy, setArchUnlockBusy] = useState(false);
+  const [archUnlockError, setArchUnlockError] = useState("");
+  const [archUnlockBanner, setArchUnlockBanner] = useState(null); // "success" | "cancelled" | null
+
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get("archUnlock");
+    if (status === "success" || status === "cancelled") {
+      setArchUnlockBanner(status);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const refreshAccess = (id) => {
     fetch(`/api/access?deviceId=${encodeURIComponent(id)}`)
       .then((r) => r.json())
@@ -1423,7 +1461,24 @@ export default function DIYvsProDashboard() {
       .catch(() => {});
   };
 
-  useEffect(() => { if (deviceId) refreshAccess(deviceId); }, [deviceId, unlockBanner]);
+  useEffect(() => { if (deviceId) refreshAccess(deviceId); }, [deviceId, unlockBanner, archUnlockBanner]);
+
+  const handleUnlockArchitecture = async () => {
+    setArchUnlockBusy(true); setArchUnlockError("");
+    try {
+      const response = await fetch("/api/unlock-architecture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Couldn't start checkout");
+      window.location.href = data.url;
+    } catch (e) {
+      setArchUnlockError(e.message || "Couldn't start checkout — try again.");
+      setArchUnlockBusy(false);
+    }
+  };
 
   // Passed down to every AI-costing tab: call after a fetch response comes
   // back so a 402 (trial exhausted) pops the paywall instead of a generic error.
@@ -1614,18 +1669,24 @@ export default function DIYvsProDashboard() {
           </button>
         </div>
         {/* Tab bar */}
-        <nav className="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto">
-          {TABS.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className="px-4 py-2.5 text-xs font-bold uppercase whitespace-nowrap rounded-t"
-              style={{
-                fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em",
-                background: tab === t.id ? T.panel : "transparent",
-                color: tab === t.id ? T.ink : T.faint,
-              }}>
-              {t.label}
-            </button>
-          ))}
+        <nav className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap gap-3"
+             style={{ borderTop: `1px solid ${T.line}`, background: "rgba(11,13,16,0.6)" }}>
+          {TABS.map((t) => {
+            const isActive = tab === t.id;
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className="px-5 py-2.5 text-xs font-bold uppercase rounded-xl transition-all shadow-md hover:brightness-110 active:scale-95"
+                style={{
+                  fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em",
+                  background: isActive ? `linear-gradient(to right, ${T.pro}, ${T.amber})` : T.inputBg,
+                  color: isActive ? "#ffffff" : T.faint,
+                  border: isActive ? "none" : `1px solid ${T.line}`,
+                  boxShadow: isActive ? `0 4px 14px ${T.pro}33` : "none",
+                }}>
+                {t.label.replace("·", "•")}
+              </button>
+            );
+          })}
         </nav>
       </header>
 
@@ -1652,6 +1713,18 @@ export default function DIYvsProDashboard() {
                 : "Purchase cancelled — no charge was made."}
             </span>
             <button onClick={() => setUnlockBanner(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
+        {archUnlockBanner && (
+          <div className="mb-4 rounded-lg p-3 text-sm font-semibold flex items-center justify-between"
+               style={{ background: archUnlockBanner === "success" ? T.diySoft : T.proSoft,
+                        color: archUnlockBanner === "success" ? T.diy : T.pro }}>
+            <span>
+              {archUnlockBanner === "success"
+                ? "Design Studio unlocked! Head to tab 7 to generate a concept. 🎉"
+                : "Purchase cancelled — no charge was made."}
+            </span>
+            <button onClick={() => setArchUnlockBanner(null)} aria-label="Dismiss">✕</button>
           </div>
         )}
         {tab === "assess" && (
@@ -1691,7 +1764,9 @@ export default function DIYvsProDashboard() {
                                 deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
         )}
         {tab === "design" && (
-          <DesignStudio deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
+          <DesignStudio deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
+                        unlocked={!!access?.architecture_unlocked}
+                        onUnlock={handleUnlockArchitecture} unlockBusy={archUnlockBusy} unlockError={archUnlockError} />
         )}
       </main>
 

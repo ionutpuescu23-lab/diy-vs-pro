@@ -3,7 +3,7 @@
 // both a structural text spec (Claude) and a generated concept render (OpenAI
 // images/generations — there's no source photo here, so this is a from-scratch
 // generation, not an edit).
-import { consumeAccess } from "@/lib/access";
+import { checkArchitectureAccess } from "@/lib/access";
 
 const STYLE_BRIEFS = {
   modern: "contemporary minimalist architecture: clean flat/low-pitched rooflines, large glazed openings, rendered or fibre-cement cladding, neutral palette (white/grey/charcoal), exposed structural steel or timber accents",
@@ -26,9 +26,9 @@ export async function POST(request) {
     if (!deviceId) {
       return Response.json({ error: "Missing device ID" }, { status: 400 });
     }
-    const access = await consumeAccess(deviceId);
+    const access = await checkArchitectureAccess(deviceId);
     if (!access.allowed) {
-      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
+      return Response.json({ error: "Design Studio isn't unlocked yet", paywall: true, architecturePaywall: true, state: access.state }, { status: 402 });
     }
 
     const anthropicKey = process.env.ANTHROPIC_API_KEY;

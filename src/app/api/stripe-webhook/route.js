@@ -8,7 +8,7 @@
 //   Events: checkout.session.completed
 // Copy the resulting signing secret into STRIPE_WEBHOOK_SECRET.
 import Stripe from "stripe";
-import { markUnlocked } from "@/lib/access";
+import { markUnlocked, markArchitectureUnlocked } from "@/lib/access";
 
 export async function POST(request) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -33,7 +33,11 @@ export async function POST(request) {
     const session = event.data.object;
     const deviceId = session.client_reference_id;
     if (deviceId) {
-      await markUnlocked(deviceId, session.id);
+      if (session.metadata?.product === "architecture") {
+        await markArchitectureUnlocked(deviceId, session.id);
+      } else {
+        await markUnlocked(deviceId, session.id);
+      }
     } else {
       console.error("Stripe webhook: checkout.session.completed with no client_reference_id", session.id);
     }
