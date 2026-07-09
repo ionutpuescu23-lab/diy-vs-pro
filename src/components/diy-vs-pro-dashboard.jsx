@@ -7,7 +7,7 @@ import {
   ListChecks, Clock, ShieldAlert, PhoneCall, ExternalLink, Ruler,
   Package, Layers, Droplets, Wrench, Scissors, PaintBucket, ShoppingCart,
   Boxes, Drill, Plug, Fan, Gauge, Info, MessageSquare, Star,
-  Building2, Sparkles, Home
+  Building2, Sparkles, Home, Copy
 } from "lucide-react";
 
 /* =========================================================================
@@ -1426,6 +1426,18 @@ export default function DIYvsProDashboard() {
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [unlockError, setUnlockError] = useState("");
   const [unlockBanner, setUnlockBanner] = useState(null); // "success" | "cancelled" | null
+  const [deviceIdCopied, setDeviceIdCopied] = useState(false);
+
+  // Lets a user (or someone walking them through support) grab their device
+  // ID without needing DevTools — especially useful on mobile, where reading
+  // localStorage otherwise requires remote debugging via a computer.
+  const copyDeviceId = () => {
+    if (!deviceId || !navigator.clipboard) return;
+    navigator.clipboard.writeText(deviceId).then(() => {
+      setDeviceIdCopied(true);
+      setTimeout(() => setDeviceIdCopied(false), 2000);
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     let id = window.localStorage.getItem("diyvspro_device_id");
@@ -1811,6 +1823,9 @@ export default function DIYvsProDashboard() {
         <span>Estimates only — always confirm regulated work (gas, consumer units, structural) with certified trades.</span>
         <button onClick={() => setShowFeedback(true)} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
           <MessageSquare size={12} /> Give feedback
+        </button>
+        <button onClick={copyDeviceId} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
+          <Copy size={12} /> {deviceIdCopied ? "Copied!" : "Copy device ID"}
         </button>
       </footer>
 
