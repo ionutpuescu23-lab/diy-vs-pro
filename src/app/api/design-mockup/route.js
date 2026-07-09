@@ -6,6 +6,9 @@
 // not a core feature.
 import { consumeAccess } from "@/lib/access";
 
+// OpenAI image edits can run long — extend past the platform default timeout.
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
     const { imageData, mediaType, issue, rootCause, deviceId } = await request.json();

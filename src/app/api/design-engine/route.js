@@ -5,6 +5,10 @@
 // generation, not an edit).
 import { checkArchitectureAccess } from "@/lib/access";
 
+// This route chains a Claude call and an OpenAI image-generation call —
+// comfortably past most platform default timeouts, hence the explicit bump.
+export const maxDuration = 60;
+
 const STYLE_BRIEFS = {
   modern: "contemporary minimalist architecture: clean flat/low-pitched rooflines, large glazed openings, rendered or fibre-cement cladding, neutral palette (white/grey/charcoal), exposed structural steel or timber accents",
   futuristic: "futuristic parametric architecture: sweeping curved forms, cantilevered volumes, floor-to-ceiling glass, dark metallic and glass cladding, integrated photovoltaic surfaces, minimal visible ornamentation",

@@ -6,6 +6,9 @@
 // carries a confidence level and caveats for the UI to surface honestly.
 import { consumeAccess } from "@/lib/access";
 
+// Claude vision analysis can run long — extend past the platform default timeout.
+export const maxDuration = 60;
+
 const REFERENCE_SIZES = {
   a4: "an A4 sheet of paper (210mm x 297mm)",
   card: "a credit/debit card (85.6mm x 54mm, ISO ID-1 size)",

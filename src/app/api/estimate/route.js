@@ -3,6 +3,9 @@
 // and the export MUST be named after the HTTP method (POST).
 import { consumeAccess } from "@/lib/access";
 
+// Claude vision analysis can run long — extend past the platform default timeout.
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
     // Frontend sends: { imageData?: <base64 string>, mediaType?: "image/jpeg", description?: string, deviceId }

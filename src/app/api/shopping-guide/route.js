@@ -5,6 +5,9 @@
 // here — just pricing/quality guidance, so it's safe for Claude to generate directly.
 import { consumeAccess } from "@/lib/access";
 
+// Claude generation can run long — extend past the platform default timeout.
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
     const { issue, trade, materials, deviceId } = await request.json();

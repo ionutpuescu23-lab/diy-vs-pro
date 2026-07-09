@@ -6,6 +6,11 @@
 // stable URLs) and tell the user to search them by their own postcode.
 import { consumeAccess } from "@/lib/access";
 
+// Claude's phased-plan generation can take longer than the platform default
+// timeout, especially under load — extend it explicitly rather than risk a
+// truncated response on slower requests.
+export const maxDuration = 60;
+
 const TRADE_DIRECTORIES = {
   "Gas Engineer (Gas Safe)": [
     { body: "Gas Safe Register", url: "https://www.gassaferegister.co.uk/find-an-engineer/", notes: "The legally required register for anyone working on gas in the UK. Search by postcode." },
