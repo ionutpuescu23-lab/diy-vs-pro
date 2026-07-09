@@ -6,7 +6,8 @@ import {
   CheckCircle2, Loader2, Plus, Trash2, Scale, ClipboardList, PoundSterling,
   ListChecks, Clock, ShieldAlert, PhoneCall, ExternalLink, Ruler,
   Package, Layers, Droplets, Wrench, Scissors, PaintBucket, ShoppingCart,
-  Boxes, Drill, Plug, Fan, Gauge, Info, MessageSquare, Star
+  Boxes, Drill, Plug, Fan, Gauge, Info, MessageSquare, Star,
+  Building2, Sparkles, Home
 } from "lucide-react";
 
 /* =========================================================================
@@ -23,23 +24,34 @@ import {
         Beginner Mode (difficulty rating, confidence booster, common mistakes)
      F. Materials & Tools Guide — visual cards with real Pexels photos: material
         quality notes + supplier names, and tools needed with buy vs rent logic
+     G. Design Studio — house shape/size/style brief -> AI structural concept
+        spec (Claude) + a generated exterior concept render (OpenAI images)
    All costs recalculate in real time from a single shared state.
    ========================================================================= */
 
-/* ---------------------------- DESIGN TOKENS ----------------------------- */
+/* ---------------------------- DESIGN TOKENS -----------------------------
+   Dark glassmorphism theme: near-black base, translucent blurred zinc
+   panels, bright accent colours tuned for contrast against dark backgrounds
+   (the old palette was tuned for a light "blueprint paper" background —
+   the same hex values would wash out on dark, hence brighter accents here). */
 const T = {
-  paper:   "#F4F7FA",   // cool drawing-office paper
-  panel:   "#FFFFFF",
-  ink:     "#16212E",   // slate ink
-  faint:   "#5B6B7C",   // secondary text
-  line:    "#D3DDE7",   // hairline blueprint grid
-  blue:    "#2B5379",   // structural / headings
-  diy:     "#1E7A55",   // DIY side (site green)
-  diySoft: "#E6F3ED",
-  pro:     "#D9530F",   // PRO side (safety orange)
-  proSoft: "#FCEEE4",
-  danger:  "#B3261E",
-  amber:   "#B7791F",
+  paper:    "#0B0D10",              // near-black app background (behind the ambient photo)
+  panel:    "rgba(24,26,32,0.78)",  // translucent zinc-900 glass card
+  panelBg:  "rgba(24,26,32,0.92)",  // less-translucent variant for opaque-feeling surfaces (inputs, header)
+  ink:      "#F1F5F9",              // near-white primary text
+  faint:    "#94A3B8",              // slate-400 secondary text
+  line:     "rgba(255,255,255,0.09)", // hairline border on dark glass
+  blue:     "#60A5FA",              // structural / headings accent
+  diy:      "#34D399",              // DIY side (bright emerald)
+  diySoft:  "rgba(52,211,153,0.14)",
+  pro:      "#FB923C",              // PRO side (bright orange)
+  proSoft:  "rgba(251,146,60,0.14)",
+  danger:   "#F87171",
+  amber:    "#FBBF24",
+  amberSoft:"rgba(251,191,36,0.14)",
+  dangerSoft:"rgba(248,113,113,0.14)",
+  inputBg:  "#1C2027",              // dark input/select field background
+  headerBg: "rgba(9,10,13,0.85)",   // solid-feeling glass cover bar for the masthead
 };
 const money = (n) =>
   "£" + (isFinite(n) ? n : 0).toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -114,15 +126,15 @@ const STARTER_TOOLS = [
 // Keyword -> icon/colour lookup so material & tool cards get a relevant glyph
 // without depending on hotlinked retailer product photos.
 const MATERIAL_ICON_RULES = [
-  { test: /plaster|render|skim|paint/i,        icon: PaintBucket, color: "#2B5379" },
-  { test: /membrane|damp|dpc|waterproof/i,     icon: Droplets,    color: "#D9530F" },
-  { test: /pva|sbr|bond|adhesive|glue|sealant/i,icon: Droplets,   color: "#B7791F" },
-  { test: /insulation|board|sheet/i,           icon: Layers,      color: "#1E7A55" },
-  { test: /brick|block|mortar|cement|sand/i,   icon: Boxes,       color: "#5B6B7C" },
+  { test: /plaster|render|skim|paint/i,        icon: PaintBucket, color: T.blue },
+  { test: /membrane|damp|dpc|waterproof/i,     icon: Droplets,    color: T.pro },
+  { test: /pva|sbr|bond|adhesive|glue|sealant/i,icon: Droplets,   color: T.amber },
+  { test: /insulation|board|sheet/i,           icon: Layers,      color: T.diy },
+  { test: /brick|block|mortar|cement|sand/i,   icon: Boxes,       color: T.faint },
 ];
 function materialIcon(name = "") {
   const hit = MATERIAL_ICON_RULES.find((r) => r.test.test(name));
-  return hit || { icon: Package, color: "#5B6B7C" };
+  return hit || { icon: Package, color: T.faint };
 }
 
 const TOOL_ICON_RULES = [
@@ -171,14 +183,14 @@ function Field({ label, value, onChange, prefix, suffix, step = 1, width = "w-fu
   return (
     <label className={`block ${width}`}>
       <span className="block text-xs mb-1" style={{ color: T.faint }}>{label}</span>
-      <div className="flex items-center rounded border bg-white overflow-hidden focus-within:ring-2"
-           style={{ borderColor: T.line }}>
+      <div className="flex items-center rounded border overflow-hidden focus-within:ring-2"
+           style={{ borderColor: T.line, background: T.inputBg }}>
         {prefix && <span className="px-2 text-sm" style={{ color: T.faint }}>{prefix}</span>}
         <input
           type="number" step={step} value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full px-2 py-1.5 text-sm outline-none"
-          style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.ink }}
+          style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.ink, background: "transparent" }}
         />
         {suffix && <span className="px-2 text-xs whitespace-nowrap" style={{ color: T.faint }}>{suffix}</span>}
       </div>
@@ -188,7 +200,7 @@ function Field({ label, value, onChange, prefix, suffix, step = 1, width = "w-fu
 
 function Panel({ title, icon: Icon, accent = T.blue, children, subtitle }) {
   return (
-    <section className="rounded-lg border shadow-sm" style={{ background: T.panel, borderColor: T.line }}>
+    <section className="rounded-xl border shadow-xl overflow-hidden backdrop-blur-md" style={{ background: T.panel, borderColor: T.line }}>
       <header className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: T.line }}>
         {Icon && <Icon size={16} style={{ color: accent }} />}
         <h3 className="font-bold text-sm uppercase" style={{ color: T.ink, letterSpacing: "0.08em", fontFamily: "'Archivo', sans-serif" }}>
@@ -296,7 +308,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
           role="button" tabIndex={0}
           onKeyDown={(e) => e.key === "Enter" && fileRef.current?.click()}
           className="rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-center cursor-pointer p-6 transition-colors"
-          style={{ minHeight: "14rem", borderColor: dragOver ? T.blue : T.line, background: dragOver ? "#EDF3F9" : T.paper }}
+          style={{ minHeight: "14rem", borderColor: dragOver ? T.blue : T.line, background: dragOver ? "rgba(96,165,250,0.10)" : "transparent" }}
         >
           {image ? (
             <img src={image.previewUrl} alt="Uploaded issue" className="max-h-64 rounded shadow" />
@@ -318,7 +330,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
           <textarea
             value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
             placeholder="e.g. Damp patch on the north wall, musty smell, gets worse after heavy rain…"
-            className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line }}
+            className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}
           />
         </label>
 
@@ -356,7 +368,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
             </div>
             {result.regulated && (
               <div className="flex items-start gap-2 rounded p-2 text-xs font-semibold"
-                   style={{ background: "#FBEBEA", color: T.danger }}>
+                   style={{ background: T.dangerSoft, color: T.danger }}>
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 Regulated work — a certified {result.trade} is required by law. The verdict will enforce this.
               </div>
@@ -436,7 +448,7 @@ function MaterialEngine({ materials, setMaterials, tier, setTier, travel, setTra
               className="flex-1 px-4 py-2 text-xs font-bold uppercase"
               style={{
                 fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em",
-                background: tier === t.id ? T.blue : "white",
+                background: tier === t.id ? T.blue : T.inputBg,
                 color: tier === t.id ? "white" : T.faint,
               }}>
               {t.label}
@@ -468,13 +480,13 @@ function MaterialEngine({ materials, setMaterials, tier, setTier, travel, setTra
                              className="w-full bg-transparent outline-none" style={{ minWidth: "10rem", color: T.ink }} />
                     </td>
                     <td><input type="number" value={m.qty} onChange={(e) => edit(m.id, "qty", e.target.value)}
-                               className="w-16 rounded border px-1 py-0.5" style={{ borderColor: T.line }} /></td>
+                               className="w-16 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
                     <td><input value={m.unit} onChange={(e) => edit(m.id, "unit", e.target.value)}
-                               className="w-20 rounded border px-1 py-0.5" style={{ borderColor: T.line }} /></td>
+                               className="w-20 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
                     <td><input type="number" step="0.5" value={m.budget} onChange={(e) => edit(m.id, "budget", e.target.value)}
-                               className="w-24 rounded border px-1 py-0.5" style={{ borderColor: T.line }} /></td>
+                               className="w-24 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
                     <td><input type="number" step="0.5" value={m.high} onChange={(e) => edit(m.id, "high", e.target.value)}
-                               className="w-24 rounded border px-1 py-0.5" style={{ borderColor: T.line }} /></td>
+                               className="w-24 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
                     <td className="text-right font-semibold" style={{ color: T.ink }}>{money(line)}</td>
                     <td className="text-right">
                       <button onClick={() => remove(m.id)} aria-label={`Remove ${m.name}`}>
@@ -526,7 +538,7 @@ function LabourEstimator({ labour, setLabour, region, proLabour }) {
           <input value={labour.postcode} onChange={(e) => setLabour({ ...labour, postcode: e.target.value })}
                  placeholder="e.g. L1, M4, SW11"
                  className="w-full rounded border px-2 py-1.5 text-sm uppercase outline-none"
-                 style={{ borderColor: T.line, fontFamily: "'IBM Plex Mono', monospace" }} />
+                 style={{ borderColor: T.line, fontFamily: "'IBM Plex Mono', monospace", background: T.inputBg, color: T.ink }} />
         </label>
         <label className="block">
           <span className="block text-xs mb-1" style={{ color: T.faint }}>Trade required</span>
@@ -535,7 +547,7 @@ function LabourEstimator({ labour, setLabour, region, proLabour }) {
                     const t = TRADES.find((x) => x.id === e.target.value);
                     setLabour({ ...labour, tradeId: e.target.value, dayRate: t.rate });
                   }}
-                  className="w-full rounded border px-2 py-1.5 text-sm bg-white" style={{ borderColor: T.line }}>
+                  className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
           {TRADES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
@@ -647,7 +659,7 @@ function DecisionMatrix({ diy, pro, verdict, timeValue, setTimeValue, diyHours, 
         style={{
           borderColor: verdict.color,
           background: verdict.hazard
-            ? `repeating-linear-gradient(45deg, ${T.proSoft}, ${T.proSoft} 14px, #FDF6F1 14px, #FDF6F1 28px)`
+            ? `repeating-linear-gradient(45deg, ${T.proSoft}, ${T.proSoft} 14px, rgba(251,146,60,0.06) 14px, rgba(251,146,60,0.06) 28px)`
             : verdict.diyWins ? T.diySoft : T.proSoft,
         }}
       >
@@ -753,7 +765,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
           <label className="block">
             <span className="block text-xs mb-1" style={{ color: T.faint }}>Damage severity</span>
             <select value={severity} onChange={(e) => setSeverity(e.target.value)}
-                    className="w-full rounded border px-2 py-1.5 text-sm bg-white capitalize" style={{ borderColor: T.line }}>
+                    className="w-full rounded border px-2 py-1.5 text-sm capitalize" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
               {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
@@ -778,7 +790,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <select value={refObject} onChange={(e) => setRefObject(e.target.value)}
-                      className="rounded border px-2 py-1.5 text-sm bg-white" style={{ borderColor: T.line }}>
+                      className="rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
                 <option value="a4">Reference: A4 sheet of paper</option>
                 <option value="card">Reference: credit/debit card</option>
               </select>
@@ -799,7 +811,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
             {measureError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{measureError}</p>}
             {measureResult && (
               <div className="mt-2 flex items-start gap-1.5 text-xs rounded p-1.5"
-                   style={{ background: measureResult.confidence === "high" ? T.diySoft : "#FDF6E3",
+                   style={{ background: measureResult.confidence === "high" ? T.diySoft : T.amberSoft,
                             color: measureResult.confidence === "high" ? T.diy : T.amber }}>
                 <Info size={12} className="mt-0.5 shrink-0" />
                 <span><b className="uppercase">{measureResult.confidence} confidence</b> — {measureResult.notes}</span>
@@ -831,7 +843,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
         <>
           {guide.professionalRequired?.mustCallPro && (
             <div className="rounded-lg p-4 border-2 flex items-start gap-3"
-                 style={{ borderColor: T.danger, background: "#FBEBEA" }}>
+                 style={{ borderColor: T.danger, background: T.dangerSoft }}>
               <ShieldAlert size={20} style={{ color: T.danger }} className="mt-0.5 shrink-0" />
               <div>
                 <p className="font-black uppercase text-sm" style={{ color: T.danger, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
@@ -887,7 +899,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
                     <div className="mt-2 space-y-1">
                       {phase.safetyWarnings.map((w, j) => (
                         <div key={j} className="flex items-start gap-1.5 text-xs font-semibold rounded p-1.5"
-                             style={{ background: "#FBEBEA", color: T.danger }}>
+                             style={{ background: T.dangerSoft, color: T.danger }}>
                           <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {w}
                         </div>
                       ))}
@@ -897,7 +909,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
                     <div className="mt-2 space-y-1">
                       {phase.commonMistakes.map((m, j) => (
                         <div key={j} className="flex items-start gap-1.5 text-xs rounded p-1.5"
-                             style={{ background: "#FDF6E3", color: T.amber }}>
+                             style={{ background: T.amberSoft, color: T.amber }}>
                           <Info size={12} className="mt-0.5 shrink-0" /> {m}
                         </div>
                       ))}
@@ -948,7 +960,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
             <div className="space-y-2">
               {(guide.findAProfessional || []).map((d, i) => (
                 <a key={i} href={d.url} target="_blank" rel="noopener noreferrer"
-                   className="flex items-start gap-2 rounded border p-2.5 text-sm hover:bg-[#F4F7FA] transition-colors"
+                   className="flex items-start gap-2 rounded border p-2.5 text-sm hover:bg-white/5 transition-colors"
                    style={{ borderColor: T.line }}>
                   <ExternalLink size={14} className="mt-0.5 shrink-0" style={{ color: T.blue }} />
                   <span>
@@ -972,7 +984,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
 // Falls back to the existing icon-tile look if there's no key / no result yet.
 const imageCache = new Map();
 
-function ProductImage({ query, fallbackIcon: FallbackIcon, fallbackColor = "#5B6B7C", height = "h-44" }) {
+function ProductImage({ query, fallbackIcon: FallbackIcon, fallbackColor = T.faint, height = "h-44" }) {
   const [state, setState] = useState(() => (imageCache.has(query) ? imageCache.get(query) : null));
 
   useEffect(() => {
@@ -987,7 +999,7 @@ function ProductImage({ query, fallbackIcon: FallbackIcon, fallbackColor = "#5B6
 
   if (state?.url) {
     return (
-      <div className={`relative ${height} overflow-hidden`} style={{ background: "#E7ECF1" }}>
+      <div className={`relative ${height} overflow-hidden`} style={{ background: T.inputBg }}>
         <img src={state.url} alt={query} className="w-full h-full object-cover" />
         {state.photographer && (
           <span className="absolute bottom-1 right-1 text-[9px] px-1.5 py-0.5 rounded"
@@ -1018,12 +1030,12 @@ function MaterialCard({ material, tier, note }) {
         <p className="font-semibold text-sm" style={{ color: T.ink }}>{material.name}</p>
         <p className="text-xs" style={{ color: T.faint }}>{material.qty} × {material.unit}</p>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <div className="rounded p-2 border" style={{ borderColor: tier === "budget" ? T.blue : T.line, background: tier === "budget" ? "#EDF3F9" : T.paper }}>
+          <div className="rounded p-2 border" style={{ borderColor: tier === "budget" ? T.blue : T.line, background: tier === "budget" ? "rgba(96,165,250,0.12)" : T.inputBg }}>
             <span className="text-[10px] uppercase font-bold" style={{ color: T.faint }}>Trade</span>
             <b className="block text-sm" style={{ color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }}>{money(material.budget)}</b>
             <span className="text-[10px]" style={{ color: T.faint }}>@ {note?.budgetSupplier || "trade counter"}</span>
           </div>
-          <div className="rounded p-2 border" style={{ borderColor: tier === "high" ? T.blue : T.line, background: tier === "high" ? "#EDF3F9" : T.paper }}>
+          <div className="rounded p-2 border" style={{ borderColor: tier === "high" ? T.blue : T.line, background: tier === "high" ? "rgba(96,165,250,0.12)" : T.inputBg }}>
             <span className="text-[10px] uppercase font-bold" style={{ color: T.faint }}>Retail</span>
             <b className="block text-sm" style={{ color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }}>{money(material.high)}</b>
             <span className="text-[10px]" style={{ color: T.faint }}>@ {note?.highSupplier || "DIY retailer"}</span>
@@ -1159,6 +1171,188 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPay
   );
 }
 
+/* ================ MODULE G — DESIGN STUDIO (ARCHITECTURE ENGINE) =========== */
+
+const HOUSE_SHAPES = [
+  { id: "rectangular", label: "Rectangular" },
+  { id: "l-shape",     label: "L-shape" },
+  { id: "u-shape",     label: "U-shape / courtyard" },
+  { id: "split_level", label: "Split-level" },
+];
+
+const HOUSE_STYLES = [
+  { id: "modern",      label: "Modern minimalist" },
+  { id: "futuristic",  label: "Futuristic" },
+  { id: "classic",     label: "Classic British" },
+  { id: "oriental",    label: "Oriental-influenced" },
+];
+
+function SpecRow({ label, children }) {
+  return (
+    <div className="py-2 border-b last:border-b-0" style={{ borderColor: T.line }}>
+      <span className="block text-[10px] uppercase font-bold mb-0.5" style={{ color: T.faint }}>{label}</span>
+      <div className="text-sm" style={{ color: T.ink }}>{children}</div>
+    </div>
+  );
+}
+
+function DesignStudio({ deviceId, onPaywall, onAccessChange }) {
+  const [shape, setShape] = useState("rectangular");
+  const [sizeM2, setSizeM2] = useState(120);
+  const [storeys, setStoreys] = useState(2);
+  const [style, setStyle] = useState("modern");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [spec, setSpec] = useState(null);
+  const [image, setImage] = useState(null);
+
+  const generate = async () => {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/design-engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shape, sizeM2, storeys, style, notes, deviceId }),
+      });
+      const parsed = await response.json();
+      onAccessChange?.();
+      if (!response.ok) {
+        if (onPaywall?.(response)) return;
+        throw new Error(parsed.error || "Design generation failed");
+      }
+      setSpec(parsed.spec);
+      setImage(parsed.image);
+    } catch (e) {
+      setError(e.message || "Couldn't generate the design — try again in a moment.");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Design Studio" icon={Building2}
+             subtitle="house brief -> AI structural concept + generated render">
+        <p className="text-sm" style={{ color: T.ink }}>
+          Describe the house you're imagining and the engine will produce an early-concept structural spec
+          (footprint, storeys, materials, rough UK self-build cost) alongside a generated exterior concept render.
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <label className="block">
+            <span className="block text-xs mb-1" style={{ color: T.faint }}>Footprint shape</span>
+            <select value={shape} onChange={(e) => setShape(e.target.value)}
+                    className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
+              {HOUSE_SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </label>
+          <Field label="Total floor area" suffix="m²" step={5} value={sizeM2} onChange={setSizeM2} />
+          <label className="block">
+            <span className="block text-xs mb-1" style={{ color: T.faint }}>Storeys</span>
+            <select value={storeys} onChange={(e) => setStoreys(Number(e.target.value))}
+                    className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
+              {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs mb-1" style={{ color: T.faint }}>Style direction</span>
+            <select value={style} onChange={(e) => setStyle(e.target.value)}
+                    className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
+              {HOUSE_STYLES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <label className="block mt-3">
+          <span className="block text-xs mb-1" style={{ color: T.faint }}>Anything specific? (optional)</span>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+                    placeholder="e.g. sloped site, south-facing garden, want a home office…"
+                    className="w-full rounded border px-2 py-1.5 text-sm outline-none resize-none"
+                    style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+        </label>
+
+        <button
+          onClick={generate} disabled={busy}
+          className="mt-3 rounded py-2.5 px-4 font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40"
+          style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}
+        >
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          {busy ? "DESIGNING…" : spec ? "REGENERATE DESIGN" : "GENERATE DESIGN CONCEPT"}
+        </button>
+        {error && <p className="mt-2 text-xs" style={{ color: T.danger }}>{error}</p>}
+      </Panel>
+
+      {(spec || image) && (
+        <div className="grid md:grid-cols-2 gap-4">
+          <Panel title="Concept Render" icon={Home} subtitle="AI-generated exterior visualisation">
+            {image ? (
+              <img src={image} alt="Generated house concept" className="w-full rounded-lg" style={{ border: `1px solid ${T.line}` }} />
+            ) : (
+              <div className="h-64 flex items-center justify-center rounded-lg" style={{ background: T.inputBg }}>
+                <Loader2 size={24} className="animate-spin" style={{ color: T.faint }} />
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Structural Spec" icon={ClipboardList} subtitle="RIBA Stage 1 concept-level brief">
+            {spec ? (
+              <div>
+                <p className="text-sm mb-2" style={{ color: T.ink }}>{spec.overview}</p>
+                <SpecRow label="Footprint">
+                  {spec.footprint?.shape} — {spec.footprint?.approxDimensions}
+                  <p className="text-xs mt-1" style={{ color: T.faint }}>{spec.footprint?.orientation}</p>
+                </SpecRow>
+                <SpecRow label="Storeys">
+                  {(spec.storeys || []).map((s, i) => (
+                    <p key={i} className="text-xs mb-1">
+                      <b style={{ color: T.ink }}>{s.level}</b> ({s.approxAreaM2} m²) — <span style={{ color: T.faint }}>{(s.rooms || []).join(", ")}</span>
+                    </p>
+                  ))}
+                </SpecRow>
+                <SpecRow label="Structure">
+                  <p className="text-xs"><b>Foundation:</b> {spec.structure?.foundationType}</p>
+                  <p className="text-xs mt-1"><b>Primary structure:</b> {spec.structure?.primaryStructure}</p>
+                  <p className="text-xs mt-1"><b>Roof:</b> {spec.structure?.roofType}</p>
+                </SpecRow>
+                <SpecRow label="Materials">
+                  <p className="text-xs"><b>Facade:</b> {spec.materials?.facade}</p>
+                  <p className="text-xs mt-1"><b>Roof:</b> {spec.materials?.roof}</p>
+                  <p className="text-xs mt-1"><b>Glazing:</b> {spec.materials?.glazing}</p>
+                </SpecRow>
+                {spec.sustainability?.length > 0 && (
+                  <SpecRow label="Sustainability">
+                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                      {spec.sustainability.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </SpecRow>
+                )}
+                {spec.regulatoryNotes?.length > 0 && (
+                  <SpecRow label="UK regulatory notes">
+                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                      {spec.regulatoryNotes.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </SpecRow>
+                )}
+                {spec.estimatedBuildCostGBP && (
+                  <SpecRow label="Estimated UK self-build cost">
+                    <b style={{ color: T.blue, fontFamily: "'IBM Plex Mono', monospace" }}>
+                      {money(spec.estimatedBuildCostGBP.low)} – {money(spec.estimatedBuildCostGBP.high)}
+                    </b>
+                    <p className="text-xs mt-1" style={{ color: T.faint }}>{spec.estimatedBuildCostGBP.basis}</p>
+                  </SpecRow>
+                )}
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center rounded-lg" style={{ background: T.inputBg }}>
+                <Loader2 size={24} className="animate-spin" style={{ color: T.faint }} />
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ============================== APP SHELL ================================= */
 
 const TABS = [
@@ -1168,6 +1362,7 @@ const TABS = [
   { id: "decision", label: "4 · Decision Matrix" },
   { id: "guide",    label: "5 · Step-by-Step Guide" },
   { id: "shopping", label: "6 · Materials & Tools" },
+  { id: "design",   label: "7 · Design Studio" },
 ];
 
 export default function DIYvsProDashboard() {
@@ -1373,7 +1568,7 @@ export default function DIYvsProDashboard() {
           backgroundPosition: "center",
         }}
       >
-        <div className="absolute inset-0" style={{ background: "rgba(244,247,250,0.90)" }} />
+        <div className="absolute inset-0" style={{ background: "rgba(11,13,16,0.55)" }} />
       </div>
 
       {/* Load the two project faces once */}
@@ -1381,7 +1576,7 @@ export default function DIYvsProDashboard() {
       <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
 
       {/* Masthead */}
-      <header className="border-b" style={{ background: T.ink, borderColor: T.ink }}>
+      <header className="border-b backdrop-blur-md" style={{ background: T.headerBg, borderColor: T.line }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
           <div className="rounded p-2" style={{ background: T.pro }}><MjolnirIcon size={18} color="white" bg={T.pro} /></div>
           <div>
@@ -1389,7 +1584,7 @@ export default function DIYvsProDashboard() {
                 style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
               DIY <span style={{ color: T.pro }}>vs</span> PRO
             </h1>
-            <p className="text-xs" style={{ color: "#9FB0C1" }}>Property calculators & visual guide — photo → diagnosis → costed verdict</p>
+            <p className="text-xs" style={{ color: T.faint }}>Property calculators & visual guide — photo → diagnosis → costed verdict</p>
           </div>
           {/* Persistent mini-verdict so the answer follows you across tabs */}
           <button onClick={() => setTab("decision")}
@@ -1414,7 +1609,7 @@ export default function DIYvsProDashboard() {
           )}
           <button onClick={() => setShowDonate(true)}
                   className="rounded px-3 py-1.5 text-xs font-bold uppercase border"
-                  style={{ borderColor: "#3A4A5C", color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
+                  style={{ borderColor: "rgba(255,255,255,0.18)", color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
             ☕ Support
           </button>
         </div>
@@ -1425,8 +1620,8 @@ export default function DIYvsProDashboard() {
               className="px-4 py-2.5 text-xs font-bold uppercase whitespace-nowrap rounded-t"
               style={{
                 fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em",
-                background: tab === t.id ? T.paper : "transparent",
-                color: tab === t.id ? T.ink : "#9FB0C1",
+                background: tab === t.id ? T.panel : "transparent",
+                color: tab === t.id ? T.ink : T.faint,
               }}>
               {t.label}
             </button>
@@ -1495,6 +1690,9 @@ export default function DIYvsProDashboard() {
           <MaterialsToolsGuide materials={materials} tier={tier} analysis={analysis} trade={trade}
                                 deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
         )}
+        {tab === "design" && (
+          <DesignStudio deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
+        )}
       </main>
 
       <footer className="max-w-6xl mx-auto px-4 pb-6 text-xs flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: T.faint }}>
@@ -1519,18 +1717,18 @@ export default function DIYvsProDashboard() {
                 <button key={amt} onClick={() => setDonateAmount(amt)}
                         className="flex-1 rounded py-2 text-sm font-bold border"
                         style={{ borderColor: donateAmount === amt ? T.blue : T.line,
-                                 background: donateAmount === amt ? "#EDF3F9" : "white", color: T.ink }}>
+                                 background: donateAmount === amt ? "rgba(96,165,250,0.12)" : T.inputBg, color: T.ink }}>
                   {money(amt)}
                 </button>
               ))}
             </div>
             <label className="block mt-3">
               <span className="block text-xs mb-1" style={{ color: T.faint }}>Or enter a custom amount</span>
-              <div className="flex items-center rounded border bg-white overflow-hidden" style={{ borderColor: T.line }}>
+              <div className="flex items-center rounded border overflow-hidden" style={{ borderColor: T.line, background: T.inputBg }}>
                 <span className="px-2 text-sm" style={{ color: T.faint }}>£</span>
                 <input type="number" min="1" step="1" value={donateAmount}
                        onChange={(e) => setDonateAmount(Math.max(1, num(e.target.value)))}
-                       className="w-full px-2 py-1.5 text-sm outline-none" style={{ fontFamily: "'IBM Plex Mono', monospace" }} />
+                       className="w-full px-2 py-1.5 text-sm outline-none" style={{ fontFamily: "'IBM Plex Mono', monospace", background: "transparent", color: T.ink }} />
               </div>
             </label>
             {donateError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{donateError}</p>}
@@ -1615,13 +1813,13 @@ export default function DIYvsProDashboard() {
                 <label className="block mt-3">
                   <span className="block text-xs mb-1" style={{ color: T.faint }}>What could we improve?</span>
                   <textarea value={feedbackImprovements} onChange={(e) => setFeedbackImprovements(e.target.value)}
-                            rows={2} className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line }} />
+                            rows={2} className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
                 </label>
 
                 <label className="block mt-3">
                   <span className="block text-xs mb-1" style={{ color: T.faint }}>Additional comments</span>
                   <textarea value={feedbackComments} onChange={(e) => setFeedbackComments(e.target.value)}
-                            rows={2} className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line }} />
+                            rows={2} className="w-full rounded border px-2 py-1.5 text-sm outline-none" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
                 </label>
 
                 {feedbackError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{feedbackError}</p>}
