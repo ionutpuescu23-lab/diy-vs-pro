@@ -1648,7 +1648,12 @@ export default function DIYvsProDashboard() {
                            fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
             {verdict.diyWins ? `DIY saves ${money(saving)}` : safetyForced ? "Pro required" : `Pro saves ${money(saving)}`}
           </button>
-          {access?.configured && !access.unlocked && (
+          {access?.configured && access?.is_admin && (
+            <span className="rounded px-3 py-1.5 text-xs font-bold uppercase" style={{ background: T.amberSoft, color: T.amber }}>
+              ★ Admin
+            </span>
+          )}
+          {access?.configured && !access.is_admin && !access.unlocked && (
             <button onClick={() => setShowUnlock(true)}
                     className="rounded px-3 py-1.5 text-xs font-bold uppercase"
                     style={{ background: T.pro, color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
@@ -1657,7 +1662,7 @@ export default function DIYvsProDashboard() {
                 : "Unlock full access"}
             </button>
           )}
-          {access?.configured && access?.unlocked && (
+          {access?.configured && !access.is_admin && access?.unlocked && (
             <span className="rounded px-3 py-1.5 text-xs font-bold uppercase" style={{ background: T.diySoft, color: T.diy }}>
               ✓ Unlocked
             </span>
@@ -1765,7 +1770,7 @@ export default function DIYvsProDashboard() {
         )}
         {tab === "design" && (
           <DesignStudio deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
-                        unlocked={!!access?.architecture_unlocked}
+                        unlocked={!!(access?.architecture_unlocked || access?.is_admin)}
                         onUnlock={handleUnlockArchitecture} unlockBusy={archUnlockBusy} unlockError={archUnlockError} />
         )}
       </main>

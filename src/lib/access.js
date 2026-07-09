@@ -52,17 +52,21 @@ async function ensureTable(sql) {
   await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS architecture_unlocked BOOLEAN NOT NULL DEFAULT false`;
   await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS architecture_unlocked_at TIMESTAMPTZ`;
   await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS architecture_stripe_session_id TEXT`;
+  // Admin devices bypass every paywall below (main trial/unlock and the
+  // Design Studio unlock) — there's no login system, so this is only ever
+  // set directly, via /api/admin/grant, not through any user-facing flow.
+  await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false`;
 }
 
 // Read-only status check — does not consume a trial use. Used by the
 // frontend to show "X free left" / "Unlocked" without side effects.
 export async function getAccessState(deviceId) {
   const sql = getSql();
-  if (!sql) return { configured: false, unlocked: true, trial_uses_remaining: FREE_TRIAL_USES, architecture_unlocked: true };
+  if (!sql) return { configured: false, unlocked: true, trial_uses_remaining: FREE_TRIAL_USES, architecture_unlocked: true, is_admin: false };
   await ensureTable(sql);
 
   await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
-  const rows = await sql`SELECT trial_uses_remaining, unlocked, architecture_unlocked FROM device_access WHERE device_id = ${deviceId}`;
+  const rows = await sql`SELECT trial_uses_remaining, unlocked, architecture_unlocked, is_admin FROM device_access WHERE device_id = ${deviceId}`;
   return { configured: true, ...rows[0] };
 }
 
@@ -73,10 +77,11 @@ export async function consumeAccess(deviceId) {
   await ensureTable(sql);
 
   await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
-  const rows = await sql`SELECT trial_uses_remaining, unlocked FROM device_access WHERE device_id = ${deviceId}`;
+  const rows = await sql`SELECT trial_uses_remaining, unlocked, is_admin FROM device_access WHERE device_id = ${deviceId}`;
   const row = rows[0];
   if (!row) return { allowed: true, reason: "lookup_failed_fallback" };
 
+  if (row.is_admin) return { allowed: true, state: row };
   if (row.unlocked) return { allowed: true, state: row };
 
   if (row.trial_uses_remaining > 0) {
@@ -115,11 +120,11 @@ export async function checkArchitectureAccess(deviceId) {
   await ensureTable(sql);
 
   await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
-  const rows = await sql`SELECT architecture_unlocked FROM device_access WHERE device_id = ${deviceId}`;
+  const rows = await sql`SELECT architecture_unlocked, is_admin FROM device_access WHERE device_id = ${deviceId}`;
   const row = rows[0];
   if (!row) return { allowed: true, reason: "lookup_failed_fallback" };
 
-  return row.architecture_unlocked
+  return (row.is_admin || row.architecture_unlocked)
     ? { allowed: true, state: row }
     : { allowed: false, state: row };
 }
@@ -134,4 +139,19 @@ export async function markArchitectureUnlocked(deviceId, stripeSessionId) {
     VALUES (${deviceId}, true, now(), ${stripeSessionId})
     ON CONFLICT (device_id) DO UPDATE SET architecture_unlocked = true, architecture_unlocked_at = now(), architecture_stripe_session_id = ${stripeSessionId}
   `;
+}
+
+// Only ever called from /api/admin/grant, which gates on ADMIN_SECRET —
+// there's no user-facing flow that can reach this.
+export async function setAdminFlag(deviceId, isAdmin) {
+  const sql = getSql();
+  if (!sql) return { ok: false, reason: "not_configured" };
+  await ensureTable(sql);
+  await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
+  const rows = await sql`
+    UPDATE device_access SET is_admin = ${isAdmin}
+    WHERE device_id = ${deviceId}
+    RETURNING device_id, is_admin
+  `;
+  return { ok: true, state: rows[0] };
 }
