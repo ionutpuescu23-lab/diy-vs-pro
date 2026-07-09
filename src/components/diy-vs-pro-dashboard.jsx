@@ -1827,6 +1827,9 @@ export default function DIYvsProDashboard() {
         <button onClick={copyDeviceId} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
           <Copy size={12} /> {deviceIdCopied ? "Copied!" : "Copy device ID"}
         </button>
+        <a href="/terms" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Terms</a>
+        <a href="/privacy" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Privacy</a>
+        <a href="/refund" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Refunds</a>
       </footer>
 
       {/* Donation modal — flexible one-off "support this tool" payment via Stripe Checkout */}
