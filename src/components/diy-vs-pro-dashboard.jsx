@@ -892,9 +892,24 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
                       </span>
                     )}
                   </div>
-                  <ol className="mt-1.5 space-y-1 list-decimal list-inside text-sm" style={{ color: T.ink }}>
-                    {(phase.steps || []).map((s, j) => <li key={j}>{s}</li>)}
-                  </ol>
+                  <div className="mt-1.5 space-y-2">
+                    {(phase.steps || []).map((s, j) => {
+                      const stepText = typeof s === "string" ? s : s.text;
+                      const imageQuery = typeof s === "object" ? s.techniqueImageQuery : null;
+                      return (
+                        <div key={j} className="flex items-start gap-3">
+                          <span className="shrink-0 mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+                                style={{ background: T.inputBg, color: T.faint }}>{j + 1}</span>
+                          <p className="text-sm flex-1" style={{ color: T.ink }}>{stepText}</p>
+                          {imageQuery && (
+                            <div className="shrink-0 w-16 h-16 rounded-lg overflow-hidden border" style={{ borderColor: T.line }}>
+                              <ProductImage query={imageQuery} height="h-16" fallbackColor={T.blue} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                   {(phase.safetyWarnings || []).length > 0 && (
                     <div className="mt-2 space-y-1">
                       {phase.safetyWarnings.map((w, j) => (

@@ -78,7 +78,12 @@ Produce a detailed, practical DIY step-by-step remediation plan for the job belo
    {
      "name": "phase name, e.g. Diagnosis & Prep",
      "duration": "e.g. 2-3 hours",
-     "steps": ["clear imperative instruction", "..."],
+     "steps": [
+       {
+         "text": "clear imperative instruction",
+         "techniqueImageQuery": "a short, generic stock-photo search phrase (e.g. 'trowel spreading mortar') showing the hand technique for THIS step, only if a photo would materially help a beginner see the technique — otherwise null"
+       }
+     ],
      "safetyWarnings": ["specific hazard for this phase"],
      "commonMistakes": ["a mistake beginners typically make in this phase and how to avoid it"]
    }
@@ -103,7 +108,7 @@ Job details:
 - Materials already selected: ${materialList}
 - Property location: UK postcode area ${postcode || "unspecified"} (region: ${regionArea || "unspecified"})
 
-Keep it focused: 3-5 phases, each with 3-6 concise one-sentence steps and at most 2 common mistakes. Ground the plan in real UK Building Regulations — particularly Approved Document C (site preparation and resistance to contaminants and moisture) and BS 5250 (control of condensation) where relevant to damp/moisture work — and in real drying/curing times for the materials listed. If severity is "high", or the job involves structural work, gas, or electrics, set professionalRequired.mustCallPro to true regardless of DIY feasibility. Do not include any tradesperson names, company names, or phone numbers — that is handled separately.`;
+Keep it focused: 3-5 phases, each with 3-6 concise one-sentence steps and at most 2 common mistakes. Only set techniqueImageQuery on the 1-2 steps per phase that involve a genuine hand-skill or tool technique (e.g. spreading mortar, cutting a straight line, mixing to the right consistency) — leave it null for administrative steps (e.g. "turn off the water at the stopcock"). Ground the plan in real UK Building Regulations — particularly Approved Document C (site preparation and resistance to contaminants and moisture) and BS 5250 (control of condensation) where relevant to damp/moisture work — and in real drying/curing times for the materials listed. If severity is "high", or the job involves structural work, gas, or electrics, set professionalRequired.mustCallPro to true regardless of DIY feasibility. Do not include any tradesperson names, company names, or phone numbers — that is handled separately.`;
 
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
