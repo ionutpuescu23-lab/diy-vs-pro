@@ -1186,16 +1186,14 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPay
   );
 }
 
-/* ================ MODULE G — DESIGN STUDIO (ARCHITECTURE ENGINE) =========== */
+/* ================ MODULE G — DESIGN STUDIO (ROOM & LANDSCAPE) ============== */
 
-const HOUSE_SHAPES = [
-  { id: "rectangular", label: "Rectangular" },
-  { id: "l-shape",     label: "L-shape" },
-  { id: "u-shape",     label: "U-shape / courtyard" },
-  { id: "split_level", label: "Split-level" },
+const DESIGN_SCOPES = [
+  { id: "room",      label: "Room",      icon: Home },
+  { id: "landscape", label: "Landscape", icon: MapPin },
 ];
 
-const HOUSE_STYLES = [
+const DESIGN_STYLES = [
   { id: "modern",      label: "Modern minimalist" },
   { id: "futuristic",  label: "Futuristic" },
   { id: "classic",     label: "Classic British" },
@@ -1212,23 +1210,34 @@ function SpecRow({ label, children }) {
 }
 
 function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock, unlockBusy, unlockError }) {
-  const [shape, setShape] = useState("rectangular");
-  const [sizeM2, setSizeM2] = useState(120);
-  const [storeys, setStoreys] = useState(2);
+  const [scope, setScope] = useState("room");
   const [style, setStyle] = useState("modern");
   const [notes, setNotes] = useState("");
+  const [photo, setPhoto] = useState(null); // { data, mediaType, previewUrl }
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [spec, setSpec] = useState(null);
   const [image, setImage] = useState(null);
 
+  const loadPhoto = (file) => {
+    if (!file || !file.type.startsWith("image/")) { setError("Please drop a JPG or PNG photo."); return; }
+    setError("");
+    const reader = new FileReader();
+    reader.onload = () =>
+      setPhoto({ data: reader.result.split(",")[1], mediaType: file.type, previewUrl: URL.createObjectURL(file) });
+    reader.readAsDataURL(file);
+  };
+
   const generate = async () => {
+    if (!photo) { setError("Upload a photo of the room or garden first."); return; }
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/design-engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shape, sizeM2, storeys, style, notes, deviceId }),
+        body: JSON.stringify({ scope, imageData: photo.data, mediaType: photo.mediaType, style, notes, deviceId }),
       });
       const parsed = await response.json();
       onAccessChange?.();
@@ -1255,8 +1264,8 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
           </div>
           <h3 className="text-base font-bold" style={{ color: T.ink, fontFamily: "'Archivo', sans-serif" }}>AI Design Studio</h3>
           <p className="text-xs mt-1 mb-4 max-w-xs" style={{ color: T.faint }}>
-            Generate an AI structural concept spec and exterior render mapped to your house's shape, size and style.
-            A one-time unlock, separate from the main free trial.
+            Upload a photo of your room or garden and get an AI redesign concept — a generated "what it could look
+            like" render plus an early-concept spec. A one-time unlock, separate from the main free trial.
           </p>
           <button onClick={onUnlock} disabled={unlockBusy}
                   className="rounded-lg py-2 px-4 font-bold text-xs text-white disabled:opacity-40"
@@ -1268,44 +1277,68 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
       )}
       <div className={`space-y-4 ${!unlocked ? "opacity-30 pointer-events-none select-none" : ""}`}>
       <Panel title="Design Studio" icon={Building2}
-             subtitle="house brief -> AI structural concept + generated render">
+             subtitle="your room/garden photo -> AI redesign concept + generated render">
         <p className="text-sm" style={{ color: T.ink }}>
-          Describe the house you're imagining and the engine will produce an early-concept structural spec
-          (footprint, storeys, materials, rough UK self-build cost) alongside a generated exterior concept render.
+          Upload a photo of the actual room or garden you want to reimagine, pick a scope and style, and the
+          engine will produce a redesign concept spec alongside an edited "what it could look like" render of
+          your own space.
         </p>
 
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <label className="block">
-            <span className="block text-xs mb-1" style={{ color: T.faint }}>Footprint shape</span>
-            <select value={shape} onChange={(e) => setShape(e.target.value)}
-                    className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
-              {HOUSE_SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-          </label>
-          <Field label="Total floor area" suffix="m²" step={5} value={sizeM2} onChange={setSizeM2} />
-          <label className="block">
-            <span className="block text-xs mb-1" style={{ color: T.faint }}>Storeys</span>
-            <select value={storeys} onChange={(e) => setStoreys(Number(e.target.value))}
-                    className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
-              {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </label>
+        <div className="mt-4 flex gap-2">
+          {DESIGN_SCOPES.map((s) => {
+            const Icon = s.icon;
+            const active = scope === s.id;
+            return (
+              <button key={s.id} onClick={() => setScope(s.id)}
+                      className="flex-1 rounded-lg border py-2.5 text-sm font-bold flex items-center justify-center gap-2"
+                      style={{ borderColor: active ? T.blue : T.line, background: active ? "rgba(96,165,250,0.12)" : T.inputBg, color: active ? T.blue : T.faint }}>
+                <Icon size={15} /> {s.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); loadPhoto(e.dataTransfer.files[0]); }}
+          onClick={() => fileRef.current?.click()}
+          role="button" tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && fileRef.current?.click()}
+          className="mt-3 rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-center cursor-pointer p-6 transition-colors"
+          style={{ minHeight: "10rem", borderColor: dragOver ? T.blue : T.line, background: dragOver ? "rgba(96,165,250,0.10)" : "transparent" }}
+        >
+          {photo ? (
+            <img src={photo.previewUrl} alt={`Uploaded ${scope}`} className="max-h-56 rounded shadow" />
+          ) : (
+            <>
+              <Upload size={26} style={{ color: T.blue }} />
+              <p className="mt-2 text-sm font-medium" style={{ color: T.ink }}>
+                Drag & drop a photo of your {scope === "room" ? "room" : "garden"}
+              </p>
+              <p className="text-xs mt-1" style={{ color: T.faint }}>or click to browse — JPG / PNG</p>
+            </>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                 onChange={(e) => loadPhoto(e.target.files[0])} />
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-xs mb-1" style={{ color: T.faint }}>Style direction</span>
             <select value={style} onChange={(e) => setStyle(e.target.value)}
                     className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
-              {HOUSE_STYLES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              {DESIGN_STYLES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </label>
+          <label className="block">
+            <span className="block text-xs mb-1" style={{ color: T.faint }}>Anything specific? (optional)</span>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={1}
+                      placeholder={scope === "room" ? "e.g. open up to the kitchen, add storage…" : "e.g. add a deck, low-maintenance planting…"}
+                      className="w-full rounded border px-2 py-1.5 text-sm outline-none resize-none"
+                      style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+          </label>
         </div>
-
-        <label className="block mt-3">
-          <span className="block text-xs mb-1" style={{ color: T.faint }}>Anything specific? (optional)</span>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
-                    placeholder="e.g. sloped site, south-facing garden, want a home office…"
-                    className="w-full rounded border px-2 py-1.5 text-sm outline-none resize-none"
-                    style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
-        </label>
 
         <button
           onClick={generate} disabled={busy}
@@ -1320,9 +1353,9 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
 
       {(spec || image) && (
         <div className="grid md:grid-cols-2 gap-4">
-          <Panel title="Concept Render" icon={Home} subtitle="AI-generated exterior visualisation">
+          <Panel title="Concept Render" icon={Home} subtitle="AI-edited version of your own photo">
             {image ? (
-              <img src={image} alt="Generated house concept" className="w-full rounded-lg" style={{ border: `1px solid ${T.line}` }} />
+              <img src={image} alt="Redesign concept" className="w-full rounded-lg" style={{ border: `1px solid ${T.line}` }} />
             ) : (
               <div className="h-64 flex items-center justify-center rounded-lg" style={{ background: T.inputBg }}>
                 <Loader2 size={24} className="animate-spin" style={{ color: T.faint }} />
@@ -1330,51 +1363,42 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
             )}
           </Panel>
 
-          <Panel title="Structural Spec" icon={ClipboardList} subtitle="RIBA Stage 1 concept-level brief">
+          <Panel title="Redesign Spec" icon={ClipboardList} subtitle="early-concept level brief">
             {spec ? (
               <div>
                 <p className="text-sm mb-2" style={{ color: T.ink }}>{spec.overview}</p>
-                <SpecRow label="Footprint">
-                  {spec.footprint?.shape} — {spec.footprint?.approxDimensions}
-                  <p className="text-xs mt-1" style={{ color: T.faint }}>{spec.footprint?.orientation}</p>
-                </SpecRow>
-                <SpecRow label="Storeys">
-                  {(spec.storeys || []).map((s, i) => (
-                    <p key={i} className="text-xs mb-1">
-                      <b style={{ color: T.ink }}>{s.level}</b> ({s.approxAreaM2} m²) — <span style={{ color: T.faint }}>{(s.rooms || []).join(", ")}</span>
-                    </p>
-                  ))}
-                </SpecRow>
-                <SpecRow label="Structure">
-                  <p className="text-xs"><b>Foundation:</b> {spec.structure?.foundationType}</p>
-                  <p className="text-xs mt-1"><b>Primary structure:</b> {spec.structure?.primaryStructure}</p>
-                  <p className="text-xs mt-1"><b>Roof:</b> {spec.structure?.roofType}</p>
-                </SpecRow>
-                <SpecRow label="Materials">
-                  <p className="text-xs"><b>Facade:</b> {spec.materials?.facade}</p>
-                  <p className="text-xs mt-1"><b>Roof:</b> {spec.materials?.roof}</p>
-                  <p className="text-xs mt-1"><b>Glazing:</b> {spec.materials?.glazing}</p>
-                </SpecRow>
-                {spec.sustainability?.length > 0 && (
-                  <SpecRow label="Sustainability">
+                {spec.keyChanges?.length > 0 && (
+                  <SpecRow label="Key changes">
                     <ul className="list-disc list-inside text-xs space-y-0.5">
-                      {spec.sustainability.map((s, i) => <li key={i}>{s}</li>)}
+                      {spec.keyChanges.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </SpecRow>
+                )}
+                <SpecRow label="Materials">
+                  <p className="text-xs"><b>Primary:</b> {spec.materials?.primary}</p>
+                  <p className="text-xs mt-1"><b>Secondary:</b> {spec.materials?.secondary}</p>
+                  <p className="text-xs mt-1"><b>Features:</b> {spec.materials?.features}</p>
+                </SpecRow>
+                {spec.structuralNotes?.length > 0 && (
+                  <SpecRow label="Structural notes">
+                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                      {spec.structuralNotes.map((s, i) => <li key={i}>{s}</li>)}
                     </ul>
                   </SpecRow>
                 )}
                 {spec.regulatoryNotes?.length > 0 && (
                   <SpecRow label="UK regulatory notes">
                     <ul className="list-disc list-inside text-xs space-y-0.5">
-                      {spec.regulatoryNotes.map((s, i) => <li key={i}>{s}</li>)}
+                      {spec.regulatoryNotes.map((r, i) => <li key={i}>{r.reference}{r.why ? ` — ${r.why}` : ""}</li>)}
                     </ul>
                   </SpecRow>
                 )}
-                {spec.estimatedBuildCostGBP && (
-                  <SpecRow label="Estimated UK self-build cost">
+                {spec.estimatedCostGBP && (
+                  <SpecRow label="Estimated UK cost">
                     <b style={{ color: T.blue, fontFamily: "'IBM Plex Mono', monospace" }}>
-                      {money(spec.estimatedBuildCostGBP.low)} – {money(spec.estimatedBuildCostGBP.high)}
+                      {money(spec.estimatedCostGBP.low)} – {money(spec.estimatedCostGBP.high)}
                     </b>
-                    <p className="text-xs mt-1" style={{ color: T.faint }}>{spec.estimatedBuildCostGBP.basis}</p>
+                    <p className="text-xs mt-1" style={{ color: T.faint }}>{spec.estimatedCostGBP.basis}</p>
                   </SpecRow>
                 )}
               </div>
