@@ -96,32 +96,6 @@ const TRADES = [
 const FREE_TRIAL_USES_DISPLAY = 2;
 const UNLOCK_PRICE_DISPLAY = 4.99;
 
-// Starter material rows so the dashboard is useful before a photo is analysed.
-const STARTER_MATERIALS = [
-  { id: 1, name: "Multi-finish plaster 25kg", qty: 4, unit: "bag",  budget: 9.5,  high: 14 },
-  { id: 2, name: "PVA / SBR bonding 5L",      qty: 1, unit: "tub",  budget: 12,   high: 22 },
-  { id: 3, name: "Anti-damp membrane roll",   qty: 1, unit: "roll", budget: 45,   high: 89 },
-];
-
-// Starter tool rows so the Materials & Tools tab has content before the AI guide runs.
-const STARTER_TOOLS = [
-  { name: "Notched trowel & float", budgetPrice: 12, budgetSupplier: "B&Q", proPrice: 28, proSupplier: "Jewson",
-    recommendation: "buy", rentPerDay: null,
-    whyItMatters: "Budget gets the plaster on the wall; a pro stainless one glides smoother and resists rust for years.",
-    rentReason: "Cheap and reusable on every future plastering job — always worth owning." },
-  { name: "Mixing paddle + drill",  budgetPrice: 15, budgetSupplier: "Screwfix", proPrice: 45, proSupplier: "Toolstation",
-    recommendation: "buy", rentPerDay: null,
-    whyItMatters: "Budget paddles mix fine for occasional use; pro paddles handle thicker mixes without labouring your drill.",
-    rentReason: "Attaches to a drill you likely already own; useful well beyond this job." },
-  { name: "Moisture meter",         budgetPrice: 25, budgetSupplier: "Toolstation", proPrice: 90, proSupplier: "Screwfix Trade",
-    recommendation: "rent", rentPerDay: 12,
-    whyItMatters: "Budget meters give a rough go/no-go reading; pro meters are calibrated and more reliable on tricky walls.",
-    rentReason: "Only needed to confirm drying before decorating — not worth owning for a one-off job." },
-  { name: "Dust sheets & masking",  budgetPrice: 10, budgetSupplier: "B&Q", proPrice: 20, proSupplier: "Wickes",
-    recommendation: "buy", rentPerDay: null,
-    whyItMatters: "Budget sheets are thinner but fine for a single room; pro sheets are heavier and reusable many times over.",
-    rentReason: "Cheap and consumable — budget dust sheets do the job." },
-];
 
 // Keyword -> icon/colour lookup so material & tool cards get a relevant glyph
 // without depending on hotlinked retailer product photos.
@@ -545,9 +519,10 @@ function LabourEstimator({ labour, setLabour, region, proLabour }) {
           <select value={labour.tradeId}
                   onChange={(e) => {
                     const t = TRADES.find((x) => x.id === e.target.value);
-                    setLabour({ ...labour, tradeId: e.target.value, dayRate: t.rate });
+                    setLabour({ ...labour, tradeId: e.target.value, dayRate: t ? t.rate : 0 });
                   }}
                   className="w-full rounded border px-2 py-1.5 text-sm" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }}>
+          <option value="" disabled>Select a trade…</option>
           {TRADES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
@@ -1112,7 +1087,7 @@ function ToolCard({ tool }) {
 }
 
 function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPaywall, onAccessChange }) {
-  const [tools, setTools] = useState(STARTER_TOOLS);
+  const [tools, setTools] = useState([]);
   const [notes, setNotes] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1431,14 +1406,14 @@ export default function DIYvsProDashboard() {
   const [tab, setTab] = useState("assess");
 
   /* ------- shared state: every module reads/writes this single source ------ */
-  const [materials, setMaterials] = useState(STARTER_MATERIALS);
+  const [materials, setMaterials] = useState([]);
   const [tier, setTier] = useState("budget");
-  const [travel, setTravel] = useState({ mpg: 38, miles: 6, trips: 3, fuelPrice: 1.45 });
-  const [labour, setLabour] = useState({ postcode: "L1", tradeId: "plasterer", dayRate: 220, days: 2, actualQuote: 0, markup: 12 });
-  const [timeValue, setTimeValue] = useState(20);   // £/hr the user values their own time at
-  const [diyHours, setDiyHours] = useState(12);
+  const [travel, setTravel] = useState({ mpg: 0, miles: 0, trips: 0, fuelPrice: 0 });
+  const [labour, setLabour] = useState({ postcode: "", tradeId: "", dayRate: 0, days: 0, actualQuote: 0, markup: 0 });
+  const [timeValue, setTimeValue] = useState(0);    // £/hr the user values their own time at
+  const [diyHours, setDiyHours] = useState(0);
   const [analysis, setAnalysis] = useState(null);   // last vision result (safety flag lives here)
-  const [roomDims, setRoomDims] = useState({ length: 4, width: 3 });
+  const [roomDims, setRoomDims] = useState({ length: 0, width: 0 });
   const [bgImage, setBgImage] = useState(null);     // ambient background photo — purely decorative
   const [showDonate, setShowDonate] = useState(false);
   const [donateAmount, setDonateAmount] = useState(5);
