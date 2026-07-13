@@ -231,10 +231,22 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
   const loadFile = (file) => {
     if (!file || !file.type.startsWith("image/")) { setError("Please drop a JPG or PNG photo."); return; }
     setError("");
-    const reader = new FileReader();
-    reader.onload = () =>
-      setImage({ data: reader.result.split(",")[1], mediaType: file.type, previewUrl: URL.createObjectURL(file) });
-    reader.readAsDataURL(file);
+    const previewUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // Downscale to keep the base64 payload well under the platform's ~4.5MB
+      // request body limit — full-res phone photos routinely blow past it.
+      const MAX_DIMENSION = 1600;
+      const scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setImage({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl });
+    };
+    img.onerror = () => { setError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(previewUrl); };
+    img.src = previewUrl;
   };
 
   // Vision analysis: strict-JSON prompt so the response can drive the estimator.
@@ -251,7 +263,12 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
           description: description.trim(), deviceId,
         }),
       });
-      const parsed = await response.json();
+      let parsed;
+      try {
+        parsed = await response.json();
+      } catch {
+        throw new Error(`Server error (${response.status}) — the photo may be too large. Try a smaller image.`);
+      }
       onAccessChange?.();
       if (!response.ok) {
         if (onPaywall?.(response)) return;
@@ -266,7 +283,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
         }))
       );
     } catch (e) {
-      setError("Analysis failed — try a clearer photo or re-run.");
+      setError(e.message || "Analysis failed — try a clearer photo or re-run.");
     } finally { setBusy(false); }
   };
 
@@ -671,10 +688,22 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
   const loadMeasurePhoto = (file) => {
     if (!file || !file.type.startsWith("image/")) { setMeasureError("Please choose a JPG or PNG photo."); return; }
     setMeasureError("");
-    const reader = new FileReader();
-    reader.onload = () =>
-      setMeasurePhoto({ data: reader.result.split(",")[1], mediaType: file.type, previewUrl: URL.createObjectURL(file) });
-    reader.readAsDataURL(file);
+    const previewUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // Downscale to keep the base64 payload well under the platform's ~4.5MB
+      // request body limit — full-res phone photos routinely blow past it.
+      const MAX_DIMENSION = 1600;
+      const scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setMeasurePhoto({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl });
+    };
+    img.onerror = () => { setMeasureError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(previewUrl); };
+    img.src = previewUrl;
   };
 
   const estimateFromPhoto = async () => {
@@ -686,7 +715,12 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageData: measurePhoto.data, mediaType: measurePhoto.mediaType, referenceObject: refObject, deviceId }),
       });
-      const parsed = await response.json();
+      let parsed;
+      try {
+        parsed = await response.json();
+      } catch {
+        throw new Error(`Server error (${response.status}) — the photo may be too large. Try a smaller image.`);
+      }
       onAccessChange?.();
       if (!response.ok) {
         if (onPaywall?.(response)) return;
@@ -695,7 +729,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
       setRoomDims({ length: parsed.widthM, width: parsed.heightM });
       setMeasureResult({ confidence: parsed.confidence, notes: parsed.notes });
     } catch (e) {
-      setMeasureError("Couldn't estimate from that photo — try a clearer shot with the reference object fully visible.");
+      setMeasureError(e.message || "Couldn't estimate from that photo — try a clearer shot with the reference object fully visible.");
     } finally {
       setMeasureBusy(false);
     }
@@ -1199,10 +1233,23 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
   const loadPhoto = (file) => {
     if (!file || !file.type.startsWith("image/")) { setError("Please drop a JPG or PNG photo."); return; }
     setError("");
-    const reader = new FileReader();
-    reader.onload = () =>
-      setPhoto({ data: reader.result.split(",")[1], mediaType: file.type, previewUrl: URL.createObjectURL(file) });
-    reader.readAsDataURL(file);
+    const previewUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // Downscale to keep the base64 payload well under the platform's ~4.5MB
+      // request body limit — full-res outdoor/garden photos routinely blow past
+      // it (more detail than a cropped indoor shot) even though room photos don't.
+      const MAX_DIMENSION = 1600;
+      const scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setPhoto({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl });
+    };
+    img.onerror = () => { setError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(previewUrl); };
+    img.src = previewUrl;
   };
 
   const generate = async () => {
@@ -1214,7 +1261,12 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scope, imageData: photo.data, mediaType: photo.mediaType, style, notes, deviceId }),
       });
-      const parsed = await response.json();
+      let parsed;
+      try {
+        parsed = await response.json();
+      } catch {
+        throw new Error(`Server error (${response.status}) — the photo may be too large. Try a smaller image.`);
+      }
       onAccessChange?.();
       if (!response.ok) {
         if (parsed.architecturePaywall) throw new Error("Design Studio isn't unlocked on this device yet.");

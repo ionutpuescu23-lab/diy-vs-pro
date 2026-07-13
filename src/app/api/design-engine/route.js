@@ -50,7 +50,10 @@ export async function POST(request) {
       return Response.json({ error: "Design Studio isn't configured yet (missing ANTHROPIC_API_KEY or OPENAI_API_KEY)" }, { status: 500 });
     }
 
-    const scopeBrief = SCOPE_BRIEFS[scope] || SCOPE_BRIEFS.room;
+    if (!SCOPE_BRIEFS[scope]) {
+      return Response.json({ error: `Unknown design scope: ${scope}` }, { status: 400 });
+    }
+    const scopeBrief = SCOPE_BRIEFS[scope];
     const styleBrief = STYLE_BRIEFS[style] || STYLE_BRIEFS.modern;
 
     const specPrompt = `You are a UK chartered designer producing an early-concept redesign brief (concept level — not construction drawings) for ${scopeBrief.specSubject}, based on a photo the client uploaded.
