@@ -6,8 +6,7 @@ import {
   PRO_ONE_TIME_PRICE_GBP,
   PRO_MONTHLY_PRICE_GBP,
   CONTRACTOR_MONTHLY_PRICE_GBP,
-  FREE_ANONYMOUS_USES_PER_MONTH,
-  FREE_EMAIL_USES_PER_MONTH,
+  FREE_ESTIMATE_USES_PER_MONTH,
 } from "@/lib/pricing";
 
 // Matches the hex values used by the dashboard's dark theme (T tokens in
@@ -112,8 +111,7 @@ export default function PricingContent() {
               price="£0"
               cadence="forever"
               features={[
-                `${FREE_ANONYMOUS_USES_PER_MONTH} photo diagnosis / month`,
-                `${FREE_EMAIL_USES_PER_MONTH}/month free if you share your email — no account needed`,
+                `${FREE_ESTIMATE_USES_PER_MONTH} photo diagnoses / month`,
                 "Full diagnosis, materials list & regional pricing",
                 "Unlimited room-dimension estimator",
               ]}

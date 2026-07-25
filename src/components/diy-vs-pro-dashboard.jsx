@@ -10,7 +10,7 @@ import {
   Building2, Sparkles, Home, Copy
 } from "lucide-react";
 import {
-  FREE_ANONYMOUS_USES_PER_MONTH,
+  FREE_ESTIMATE_USES_PER_MONTH,
   PRO_ONE_TIME_PRICE_GBP,
   PRO_MONTHLY_PRICE_GBP,
   CONTRACTOR_MONTHLY_PRICE_GBP,
@@ -128,21 +128,6 @@ function toolIcon(name = "") {
 
 /* --------------------------- SMALL UI ATOMS ------------------------------ */
 
-// Brand mark — stylised Mjolnir (Thor's hammer), matching the app/PWA icon.
-// `bg` is used for the strap-binding cutout lines, so pass whatever this
-// renders on top of (defaults to the header badge's orange).
-function MjolnirIcon({ size = 24, color = "white", bg = T.pro }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <path d="M 24 16 L 76 16 L 85 25 L 85 37 L 76 46 L 24 46 L 15 37 L 15 25 Z" fill={color} />
-      <rect x="44" y="46" width="12" height="36" rx="2" fill={color} />
-      <rect x="44" y="50" width="12" height="3.5" fill={bg} />
-      <rect x="44" y="57" width="12" height="3.5" fill={bg} />
-      <path d="M 44.5 82 q 0 9 5.5 9 q 5.5 0 5.5 -9" stroke={color} strokeWidth="4" fill="none" />
-    </svg>
-  );
-}
-
 // Uppercase blueprint-style label above a field or block.
 function Eyebrow({ children, color = T.blue }) {
   return (
@@ -218,7 +203,7 @@ function ProGate({ isPro, title, description, onUpgrade, badge = "PRO", children
 
 /* ====================== MODULE A — VISUAL ASSESSOR ======================= */
 
-function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange, isPro, onUpgrade, access }) {
+function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
   const [image, setImage] = useState(null);        // { data, mediaType, previewUrl }
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -229,28 +214,6 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
   const [mockupBusy, setMockupBusy] = useState(false);
   const [mockupError, setMockupError] = useState("");
   const [mockupImage, setMockupImage] = useState(null);
-  const [emailInput, setEmailInput] = useState("");
-  const [emailBusy, setEmailBusy] = useState(false);
-  const [emailError, setEmailError] = useState("");
-
-  const submitEmail = async () => {
-    if (!emailInput.trim()) return;
-    setEmailBusy(true); setEmailError("");
-    try {
-      const response = await fetch("/api/capture-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, email: emailInput.trim() }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Couldn't save that — try again.");
-      onAccessChange?.();
-    } catch (e) {
-      setEmailError(e.message || "Couldn't save that — try again.");
-    } finally {
-      setEmailBusy(false);
-    }
-  };
 
   const visualizeFix = async () => {
     if (!image || !result) return;
@@ -339,8 +302,6 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
     } finally { setBusy(false); }
   };
 
-  const showEmailCapture = access?.configured && !access.is_admin && access.tier === "free" && !access.has_email;
-
   return (
     <div className="space-y-4">
       <Panel title="What DIY vs PRO does" icon={HardHat} subtitle="photo → diagnosis → costed verdict">
@@ -352,24 +313,6 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
           and safety notes, a materials & tools shopping guide, and Design Studio for room/garden redesign concepts.
         </p>
       </Panel>
-
-      {showEmailCapture && (
-        <Panel title="Get 5 free diagnoses a month" icon={CheckCircle2} accent={T.diy}
-               subtitle="instead of 1 — just your email, no account">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)}
-                   placeholder="you@example.com"
-                   className="flex-1 rounded border px-2 py-1.5 text-sm outline-none"
-                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
-            <button onClick={submitEmail} disabled={emailBusy || !emailInput.trim()}
-                    className="rounded py-1.5 px-4 text-sm font-bold text-white disabled:opacity-40 shrink-0"
-                    style={{ background: T.diy, fontFamily: "'Archivo', sans-serif" }}>
-              {emailBusy ? "Saving…" : "Unlock 5/month"}
-            </button>
-          </div>
-          {emailError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{emailError}</p>}
-        </Panel>
-      )}
 
     <div className="grid md:grid-cols-2 gap-4">
       {/* Upload zone */}
@@ -1853,7 +1796,7 @@ export default function DIYvsProDashboard() {
       {/* Masthead */}
       <header className="border-b backdrop-blur-md" style={{ background: T.headerBg, borderColor: T.line }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="rounded p-2" style={{ background: T.pro }}><MjolnirIcon size={18} color="white" bg={T.pro} /></div>
+          <img src="/icons/logo-header.png" alt="DIY vs PRO" className="rounded-lg shrink-0" style={{ width: 40, height: 40 }} />
           <div>
             <h1 className="text-lg font-black uppercase leading-tight text-white"
                 style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
@@ -1879,7 +1822,7 @@ export default function DIYvsProDashboard() {
                     className="rounded px-3 py-1.5 text-xs font-bold uppercase"
                     style={{ background: T.pro, color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
               {num(access.estimate_uses_remaining) > 0
-                ? `${access.estimate_uses_remaining}/${access.monthly_limit} free this month`
+                ? `${access.estimate_uses_remaining}/${FREE_ESTIMATE_USES_PER_MONTH} free this month`
                 : "Monthly limit reached"}
             </button>
           )}
@@ -1966,7 +1909,7 @@ export default function DIYvsProDashboard() {
         {tab === "assess" && (
           <VisualAssessor
             deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
-            isPro={isPro} onUpgrade={() => setShowUpgrade(true)} access={access}
+            isPro={isPro} onUpgrade={() => setShowUpgrade(true)}
             onAnalysis={(a) => {
               setAnalysis(a);
               // Auto-configure labour from the surveyor's report
@@ -2074,7 +2017,7 @@ export default function DIYvsProDashboard() {
           <div className="rounded-lg w-full max-w-md p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
             <Eyebrow color={T.pro}>Upgrade to PRO</Eyebrow>
             <p className="mt-1 text-sm" style={{ color: T.ink }}>
-              {upgradeReason || `The free plan includes ${access?.monthly_limit || FREE_ANONYMOUS_USES_PER_MONTH} photo diagnos${(access?.monthly_limit || FREE_ANONYMOUS_USES_PER_MONTH) === 1 ? "is" : "es"} a month. Upgrade for unlimited diagnoses, step-by-step guides, the materials & tools guide, and Design Studio.`}
+              {upgradeReason || `The free plan includes ${FREE_ESTIMATE_USES_PER_MONTH} photo diagnoses a month. Upgrade for unlimited diagnoses, step-by-step guides, the materials & tools guide, and Design Studio.`}
             </p>
 
             {checkoutConflict ? (

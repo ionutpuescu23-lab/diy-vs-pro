@@ -18,7 +18,6 @@ export default function PrivacyPage() {
         <Section title="2. What we collect">
           <List items={[
             "A random device identifier, stored in your browser's local storage and in our database — used only to track your plan (free/PRO/CONTRACTOR), monthly free-use allowance, and subscription status.",
-            "An email address, only if you choose to provide one — this is optional and is not an account (no password, no login). It raises the free plan's monthly diagnosis limit and is not used for marketing.",
             "Photos and/or text descriptions you submit for issue diagnosis, step-by-step guides, or Design Studio — sent to our AI providers to generate a response.",
             "Optional feedback you submit (ease-of-use rating, comments) — not linked to your device identifier.",
             "Payment details — handled entirely by Stripe. We never receive or store your card number.",

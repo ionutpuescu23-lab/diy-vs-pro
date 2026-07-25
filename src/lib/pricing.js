@@ -13,14 +13,7 @@ export function tierAtLeast(tier, minTier) {
   return (TIER_RANK[tier] ?? 0) >= (TIER_RANK[minTier] ?? 0);
 }
 
-// Anonymous devices get a single free diagnosis/month — enough to see the
-// app work. Providing an email (no password, no full account) raises that
-// to 5/month; it's a lead-gen mechanic, not an anti-abuse one.
-export const FREE_ANONYMOUS_USES_PER_MONTH = 1;
-export const FREE_EMAIL_USES_PER_MONTH = 5;
-export function freeMonthlyLimit(hasEmail) {
-  return hasEmail ? FREE_EMAIL_USES_PER_MONTH : FREE_ANONYMOUS_USES_PER_MONTH;
-}
+export const FREE_ESTIMATE_USES_PER_MONTH = 5;
 
 export const PRO_ONE_TIME_PRICE_GBP = 4.99;
 export const PRO_MONTHLY_PRICE_GBP = 1.99;
