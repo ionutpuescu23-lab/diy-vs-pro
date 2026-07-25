@@ -41,11 +41,12 @@ export default function TermsPage() {
 
         <Section title="4. Payments and access">
           <P>
-            The Service offers a free plan with a limited number of photo diagnoses per device each month. PRO
-            (available as a one-time purchase or a monthly subscription) removes that limit and unlocks
-            step-by-step guides, the materials & tools guide, and Design Studio. CONTRACTOR is a monthly
-            subscription that includes everything in PRO. PRO monthly and CONTRACTOR renew automatically each
-            billing period until cancelled; only the PRO one-time purchase is a single, non-recurring charge.
+            The Service offers a free plan with a limited number of photo diagnoses per device each month. PRO is a
+            monthly subscription that removes that limit and unlocks step-by-step guides, the materials & tools
+            guide, and Design Studio. CONTRACTOR is a monthly subscription that includes everything in PRO. Both
+            renew automatically each billing period until cancelled. (A one-time PRO purchase was previously
+            available; it has been discontinued for new customers, but anyone who already bought it keeps their
+            access.)
           </P>
           <P>
             Payments are processed securely by Stripe. We never see or store your card details. See our{" "}

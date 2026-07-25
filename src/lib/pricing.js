@@ -15,6 +15,9 @@ export function tierAtLeast(tier, minTier) {
 
 export const FREE_ESTIMATE_USES_PER_MONTH = 5;
 
-export const PRO_ONE_TIME_PRICE_GBP = 4.99;
+// PRO is subscription-only now — the one-time purchase was discontinued.
+// Legacy one-time buyers keep their lifetime access (see access.js's
+// pro_lifetime/grandfathering logic); this constant is intentionally gone
+// since no new one-time purchase can be started.
 export const PRO_MONTHLY_PRICE_GBP = 1.99;
 export const CONTRACTOR_MONTHLY_PRICE_GBP = 19.99;

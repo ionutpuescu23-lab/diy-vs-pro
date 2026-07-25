@@ -10,11 +10,12 @@ export default function RefundPage() {
 
         <Section title="1. Plans">
           <P>
-            DIY vs PRO offers three plans: a free plan with a limited number of monthly photo diagnoses; PRO, either
-            a one-time purchase for lifetime access or a monthly subscription, unlocking unlimited diagnoses,
-            step-by-step guides, the materials & tools guide, and Design Studio; and CONTRACTOR, a monthly
-            subscription that includes everything in PRO. Only the PRO one-time purchase is non-recurring — PRO
-            monthly and CONTRACTOR are recurring subscriptions that renew automatically until cancelled.
+            DIY vs PRO offers three plans: a free plan with a limited number of monthly photo diagnoses; PRO, a
+            monthly subscription unlocking unlimited diagnoses, step-by-step guides, the materials & tools guide,
+            and Design Studio; and CONTRACTOR, a monthly subscription that includes everything in PRO. Both PRO and
+            CONTRACTOR are recurring subscriptions that renew automatically until cancelled. A one-time PRO
+            purchase was previously available and has since been discontinued for new customers — if you bought it
+            while it was offered, the terms below still apply to that purchase.
           </P>
         </Section>
 

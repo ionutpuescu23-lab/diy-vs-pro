@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import {
-  PRO_ONE_TIME_PRICE_GBP,
   PRO_MONTHLY_PRICE_GBP,
   CONTRACTOR_MONTHLY_PRICE_GBP,
   FREE_ESTIMATE_USES_PER_MONTH,
@@ -37,6 +36,8 @@ export default function PricingContent() {
   const [checkoutConflict, setCheckoutConflict] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalError, setPortalError] = useState("");
+  const [donateBusy, setDonateBusy] = useState(false);
+  const [donateError, setDonateError] = useState("");
 
   useEffect(() => {
     let id = window.localStorage.getItem("diyvspro_device_id");
@@ -62,6 +63,23 @@ export default function PricingContent() {
       setCheckoutError(e.message || "Couldn't start checkout — try again.");
     } finally {
       setCheckoutBusy(false);
+    }
+  };
+
+  const donate = async (amount) => {
+    setDonateBusy(true); setDonateError("");
+    try {
+      const response = await fetch("/api/donate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Couldn't start checkout");
+      window.location.href = data.url;
+    } catch (e) {
+      setDonateError(e.message || "Couldn't start checkout — try again.");
+      setDonateBusy(false);
     }
   };
 
@@ -111,19 +129,36 @@ export default function PricingContent() {
               price="£0"
               cadence="forever"
               features={[
-                `${FREE_ESTIMATE_USES_PER_MONTH} photo diagnoses / month`,
+                `${FREE_ESTIMATE_USES_PER_MONTH} free diagnoses every month`,
                 "Full diagnosis, materials list & regional pricing",
                 "Unlimited room-dimension estimator",
               ]}
-              cta={<a href="/" className="block w-full text-center rounded py-2.5 text-sm font-bold"
-                      style={{ color: C.faint, background: C.inputBg }}>Get started free</a>}
+              cta={
+                <div>
+                  <a href="/" className="block w-full text-center rounded py-2.5 text-sm font-bold"
+                     style={{ color: C.faint, background: C.inputBg }}>Get started free</a>
+                  <div className="mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
+                    <p className="text-xs mb-2" style={{ color: C.faint }}>Optional: support the app</p>
+                    <div className="flex gap-1.5">
+                      {[3, 5, 10].map((amt) => (
+                        <button key={amt} onClick={() => donate(amt)} disabled={donateBusy}
+                                className="flex-1 rounded py-1.5 text-xs font-bold border disabled:opacity-40"
+                                style={{ borderColor: C.line, color: C.ink }}>
+                          ☕ £{amt}
+                        </button>
+                      ))}
+                    </div>
+                    {donateError && <p className="mt-1 text-[11px]" style={{ color: C.danger }}>{donateError}</p>}
+                  </div>
+                </div>
+              }
             />
 
             <PlanCard
               name="PRO"
               highlight
               price={money(PRO_MONTHLY_PRICE_GBP)}
-              cadence="/month, or one-time"
+              cadence="/month"
               features={[
                 "Unlimited photo diagnoses",
                 "Step-by-step fix guides",
@@ -131,19 +166,12 @@ export default function PricingContent() {
                 "Design Studio (room & garden concepts)",
               ]}
               cta={
-                <div className="space-y-2">
-                  <button onClick={() => startCheckout("pro", "monthly")} disabled={checkoutBusy || !deviceId}
-                          className="w-full rounded py-2.5 text-sm font-bold text-white disabled:opacity-40 flex items-center justify-center gap-2"
-                          style={{ background: C.pro }}>
-                    {checkoutBusy ? <Loader2 size={14} className="animate-spin" /> : null}
-                    {money(PRO_MONTHLY_PRICE_GBP)}/mo
-                  </button>
-                  <button onClick={() => startCheckout("pro", "one_time")} disabled={checkoutBusy || !deviceId}
-                          className="w-full rounded py-2 text-xs font-bold disabled:opacity-40"
-                          style={{ color: C.pro, background: "transparent", border: `1px solid ${C.pro}` }}>
-                    or pay once: {money(PRO_ONE_TIME_PRICE_GBP)}, unlimited forever
-                  </button>
-                </div>
+                <button onClick={() => startCheckout("pro", "monthly")} disabled={checkoutBusy || !deviceId}
+                        className="w-full rounded py-2.5 text-sm font-bold text-white disabled:opacity-40 flex items-center justify-center gap-2"
+                        style={{ background: C.pro }}>
+                  {checkoutBusy ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {money(PRO_MONTHLY_PRICE_GBP)}/mo
+                </button>
               }
             />
 
