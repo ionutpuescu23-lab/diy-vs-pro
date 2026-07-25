@@ -7,7 +7,7 @@ import {
   ListChecks, Clock, ShieldAlert, PhoneCall, ExternalLink, Ruler,
   Package, Layers, Droplets, Wrench, Scissors, PaintBucket, ShoppingCart,
   Boxes, Drill, Plug, Fan, Gauge, Info, MessageSquare, Star,
-  Building2, Sparkles, Home, Copy
+  Building2, Sparkles, Home
 } from "lucide-react";
 import {
   FREE_ESTIMATE_USES_PER_MONTH,
@@ -1549,20 +1549,8 @@ export default function DIYvsProDashboard() {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutBanner, setCheckoutBanner] = useState(null); // { status: "pending"|"success"|"delayed"|"cancelled", plan }
-  const [deviceIdCopied, setDeviceIdCopied] = useState(false);
 
   const isPro = !!(access?.is_admin || (access?.tier && access.tier !== "free"));
-
-  // Lets a user (or someone walking them through support) grab their device
-  // ID without needing DevTools — especially useful on mobile, where reading
-  // localStorage otherwise requires remote debugging via a computer.
-  const copyDeviceId = () => {
-    if (!deviceId || !navigator.clipboard) return;
-    navigator.clipboard.writeText(deviceId).then(() => {
-      setDeviceIdCopied(true);
-      setTimeout(() => setDeviceIdCopied(false), 2000);
-    }).catch(() => {});
-  };
 
   useEffect(() => {
     let id = window.localStorage.getItem("diyvspro_device_id");
@@ -1996,9 +1984,7 @@ export default function DIYvsProDashboard() {
         <button onClick={() => setShowFeedback(true)} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
           <MessageSquare size={12} /> Give feedback
         </button>
-        <button onClick={copyDeviceId} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
-          <Copy size={12} /> {deviceIdCopied ? "Copied!" : "Copy device ID"}
-        </button>
+        <a href="/admin" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Admin</a>
         <a href="/pricing" className="font-semibold underline shrink-0" style={{ color: T.blue }}>Pricing</a>
         <a href="/terms" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Terms</a>
         <a href="/privacy" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Privacy</a>
