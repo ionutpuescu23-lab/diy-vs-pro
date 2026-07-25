@@ -10,7 +10,7 @@ import {
   Building2, Sparkles, Home, Copy
 } from "lucide-react";
 import {
-  FREE_ESTIMATE_USES_PER_MONTH,
+  FREE_ANONYMOUS_USES_PER_MONTH,
   PRO_ONE_TIME_PRICE_GBP,
   PRO_MONTHLY_PRICE_GBP,
   CONTRACTOR_MONTHLY_PRICE_GBP,
@@ -218,7 +218,7 @@ function ProGate({ isPro, title, description, onUpgrade, badge = "PRO", children
 
 /* ====================== MODULE A — VISUAL ASSESSOR ======================= */
 
-function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
+function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange, isPro, onUpgrade, access }) {
   const [image, setImage] = useState(null);        // { data, mediaType, previewUrl }
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -229,6 +229,28 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
   const [mockupBusy, setMockupBusy] = useState(false);
   const [mockupError, setMockupError] = useState("");
   const [mockupImage, setMockupImage] = useState(null);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState("");
+
+  const submitEmail = async () => {
+    if (!emailInput.trim()) return;
+    setEmailBusy(true); setEmailError("");
+    try {
+      const response = await fetch("/api/capture-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, email: emailInput.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Couldn't save that — try again.");
+      onAccessChange?.();
+    } catch (e) {
+      setEmailError(e.message || "Couldn't save that — try again.");
+    } finally {
+      setEmailBusy(false);
+    }
+  };
 
   const visualizeFix = async () => {
     if (!image || !result) return;
@@ -317,7 +339,38 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
     } finally { setBusy(false); }
   };
 
+  const showEmailCapture = access?.configured && !access.is_admin && access.tier === "free" && !access.has_email;
+
   return (
+    <div className="space-y-4">
+      <Panel title="What DIY vs PRO does" icon={HardHat} subtitle="photo → diagnosis → costed verdict">
+        <p className="text-sm" style={{ color: T.ink }}>
+          Upload a photo (or just describe the problem) and an AI surveyor identifies the issue, explains the root
+          cause, and builds a fix plan — flagging anything that legally needs a certified trade. From there the
+          app prices materials at both trade and retail rates, estimates regional labour costs from your postcode,
+          and lays out a straight DIY-vs-PRO cost comparison. PRO unlocks step-by-step guides with UK building-regs
+          and safety notes, a materials & tools shopping guide, and Design Studio for room/garden redesign concepts.
+        </p>
+      </Panel>
+
+      {showEmailCapture && (
+        <Panel title="Get 5 free diagnoses a month" icon={CheckCircle2} accent={T.diy}
+               subtitle="instead of 1 — just your email, no account">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)}
+                   placeholder="you@example.com"
+                   className="flex-1 rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+            <button onClick={submitEmail} disabled={emailBusy || !emailInput.trim()}
+                    className="rounded py-1.5 px-4 text-sm font-bold text-white disabled:opacity-40 shrink-0"
+                    style={{ background: T.diy, fontFamily: "'Archivo', sans-serif" }}>
+              {emailBusy ? "Saving…" : "Unlock 5/month"}
+            </button>
+          </div>
+          {emailError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{emailError}</p>}
+        </Panel>
+      )}
+
     <div className="grid md:grid-cols-2 gap-4">
       {/* Upload zone */}
       <Panel title="Photo Upload" icon={Camera} subtitle="damp, cracks, subfloors, gardens…">
@@ -440,6 +493,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
           </div>
         )}
       </Panel>
+    </div>
     </div>
   );
 }
@@ -1825,7 +1879,7 @@ export default function DIYvsProDashboard() {
                     className="rounded px-3 py-1.5 text-xs font-bold uppercase"
                     style={{ background: T.pro, color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
               {num(access.estimate_uses_remaining) > 0
-                ? `${access.estimate_uses_remaining}/${FREE_ESTIMATE_USES_PER_MONTH} free this month`
+                ? `${access.estimate_uses_remaining}/${access.monthly_limit} free this month`
                 : "Monthly limit reached"}
             </button>
           )}
@@ -1846,6 +1900,11 @@ export default function DIYvsProDashboard() {
           {portalError && (
             <span className="text-xs" style={{ color: T.danger }}>{portalError}</span>
           )}
+          <a href="/pricing"
+             className="rounded px-3 py-1.5 text-xs font-bold uppercase border"
+             style={{ borderColor: "rgba(255,255,255,0.18)", color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
+            Pricing
+          </a>
           <button onClick={() => setShowDonate(true)}
                   className="rounded px-3 py-1.5 text-xs font-bold uppercase border"
                   style={{ borderColor: "rgba(255,255,255,0.18)", color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
@@ -1907,7 +1966,7 @@ export default function DIYvsProDashboard() {
         {tab === "assess" && (
           <VisualAssessor
             deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
-            isPro={isPro} onUpgrade={() => setShowUpgrade(true)}
+            isPro={isPro} onUpgrade={() => setShowUpgrade(true)} access={access}
             onAnalysis={(a) => {
               setAnalysis(a);
               // Auto-configure labour from the surveyor's report
@@ -1957,6 +2016,7 @@ export default function DIYvsProDashboard() {
         <button onClick={copyDeviceId} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
           <Copy size={12} /> {deviceIdCopied ? "Copied!" : "Copy device ID"}
         </button>
+        <a href="/pricing" className="font-semibold underline shrink-0" style={{ color: T.blue }}>Pricing</a>
         <a href="/terms" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Terms</a>
         <a href="/privacy" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Privacy</a>
         <a href="/refund" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Refunds</a>
@@ -2014,7 +2074,7 @@ export default function DIYvsProDashboard() {
           <div className="rounded-lg w-full max-w-md p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
             <Eyebrow color={T.pro}>Upgrade to PRO</Eyebrow>
             <p className="mt-1 text-sm" style={{ color: T.ink }}>
-              {upgradeReason || `The free plan includes ${FREE_ESTIMATE_USES_PER_MONTH} photo diagnoses a month. Upgrade for unlimited diagnoses, step-by-step guides, the materials & tools guide, and Design Studio.`}
+              {upgradeReason || `The free plan includes ${access?.monthly_limit || FREE_ANONYMOUS_USES_PER_MONTH} photo diagnos${(access?.monthly_limit || FREE_ANONYMOUS_USES_PER_MONTH) === 1 ? "is" : "es"} a month. Upgrade for unlimited diagnoses, step-by-step guides, the materials & tools guide, and Design Studio.`}
             </p>
 
             {checkoutConflict ? (

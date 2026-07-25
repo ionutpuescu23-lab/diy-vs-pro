@@ -13,7 +13,7 @@
 // DATABASE_URL must be an actual connection string (postgresql://user:pass@host/db),
 // not a provider dashboard/project URL.
 import postgres from "postgres";
-import { TIERS, TIER_RANK, tierAtLeast, FREE_ESTIMATE_USES_PER_MONTH } from "@/lib/pricing";
+import { TIERS, TIER_RANK, tierAtLeast, freeMonthlyLimit } from "@/lib/pricing";
 
 const SUBSCRIPTION_ACTIVE_STATUSES = ["active", "trialing", "past_due"];
 
@@ -74,6 +74,10 @@ async function ensureTable(sql) {
   await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS subscription_current_period_end TIMESTAMPTZ`;
   await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS estimate_uses_this_period INTEGER NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS estimate_period_start TIMESTAMPTZ NOT NULL DEFAULT now()`;
+  // Optional lead-gen email — raises the FREE tier's monthly cap from 1 to
+  // 5. Not an account (no password, no login), just an email on file.
+  await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS email TEXT`;
+  await sql`ALTER TABLE device_access ADD COLUMN IF NOT EXISTS email_captured_at TIMESTAMPTZ`;
 
   if (!migrated) {
     // Design Studio used to be a separate one-time purchase
@@ -98,6 +102,8 @@ function failOpenState() {
     subscription_status: null,
     estimate_uses_remaining: null,
     estimate_period_resets_at: null,
+    has_email: true, // never show the capture nag when fail-open
+    monthly_limit: null,
   };
 }
 
@@ -110,7 +116,7 @@ export async function getAccessState(deviceId) {
 
   await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
   const rows = await sql`
-    SELECT tier, is_admin, pro_lifetime, subscription_status,
+    SELECT tier, is_admin, pro_lifetime, subscription_status, email,
       estimate_uses_this_period, estimate_period_start,
       (now() >= estimate_period_start + INTERVAL '1 month') AS period_expired,
       (CASE WHEN now() >= estimate_period_start + INTERVAL '1 month'
@@ -121,9 +127,11 @@ export async function getAccessState(deviceId) {
   const row = rows[0];
   if (!row) return failOpenState();
 
+  const hasEmail = !!row.email;
+  const monthlyLimit = freeMonthlyLimit(hasEmail);
   const effectiveUses = row.period_expired ? 0 : row.estimate_uses_this_period;
   const estimate_uses_remaining = !row.is_admin && row.tier === TIERS.FREE
-    ? Math.max(0, FREE_ESTIMATE_USES_PER_MONTH - effectiveUses)
+    ? Math.max(0, monthlyLimit - effectiveUses)
     : null; // null = unlimited
 
   return {
@@ -134,6 +142,8 @@ export async function getAccessState(deviceId) {
     subscription_status: row.subscription_status,
     estimate_uses_remaining,
     estimate_period_resets_at: row.estimate_period_resets_at,
+    has_email: hasEmail,
+    monthly_limit: row.tier === TIERS.FREE ? monthlyLimit : null,
   };
 }
 
@@ -148,7 +158,7 @@ export async function checkEstimateGate(deviceId) {
 
   await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
   const rows = await sql`
-    SELECT tier, is_admin, estimate_uses_this_period, estimate_period_start,
+    SELECT tier, is_admin, email, estimate_uses_this_period, estimate_period_start,
       (now() >= estimate_period_start + INTERVAL '1 month') AS period_expired
     FROM device_access WHERE device_id = ${deviceId}
   `;
@@ -157,11 +167,12 @@ export async function checkEstimateGate(deviceId) {
 
   if (row.is_admin || row.tier !== TIERS.FREE) return { allowed: true, state: { tier: row.tier } };
 
+  const monthlyLimit = freeMonthlyLimit(!!row.email);
   const effectiveUses = row.period_expired ? 0 : row.estimate_uses_this_period;
-  const allowed = effectiveUses < FREE_ESTIMATE_USES_PER_MONTH;
+  const allowed = effectiveUses < monthlyLimit;
   return {
     allowed,
-    state: { tier: row.tier, estimate_uses_remaining: Math.max(0, FREE_ESTIMATE_USES_PER_MONTH - effectiveUses) },
+    state: { tier: row.tier, estimate_uses_remaining: Math.max(0, monthlyLimit - effectiveUses) },
   };
 }
 
@@ -362,6 +373,21 @@ export async function findDeviceByPaymentIntent(stripePaymentIntentId) {
   await ensureTable(sql);
   const rows = await sql`SELECT device_id FROM device_access WHERE stripe_payment_intent_id = ${stripePaymentIntentId}`;
   return rows[0]?.device_id || null;
+}
+
+// Called by /api/capture-email. Not an account signup — just an email on
+// file that raises the FREE tier's monthly cap. COALESCE keeps the original
+// capture timestamp if the device resubmits (e.g. fixing a typo).
+export async function captureEmail(deviceId, email) {
+  const sql = getSql();
+  if (!sql) return { ok: false, reason: "not_configured" };
+  await ensureTable(sql);
+  await sql`INSERT INTO device_access (device_id) VALUES (${deviceId}) ON CONFLICT (device_id) DO NOTHING`;
+  await sql`
+    UPDATE device_access SET email = ${email}, email_captured_at = COALESCE(email_captured_at, now())
+    WHERE device_id = ${deviceId}
+  `;
+  return { ok: true };
 }
 
 // Used by /api/billing-portal to find which Stripe Customer to open a
