@@ -125,6 +125,49 @@ function toolIcon(name = "") {
   return (hit && hit.icon) || Wrench;
 }
 
+// Drop-in replacement for useState that persists to localStorage under `key`
+// and restores from it on mount — used for every piece of "research" state
+// (diagnosis, guides, materials, design concepts) so closing the tab or
+// refreshing doesn't lose a session. Never used for ephemeral UI/paywall
+// state (access, modals, busy/error flags). Silently no-ops on quota errors
+// or when storage is unavailable rather than breaking the app.
+//
+// Always initializes to `defaultValue` (matching what the server rendered —
+// localStorage doesn't exist there) and only reads the persisted value in a
+// post-mount effect. Reading it during the initializer instead would make
+// the client's first render disagree with the server-rendered HTML whenever
+// something was actually persisted, which React surfaces as a hydration
+// mismatch and recovers from by discarding the mismatched subtree — exactly
+// the kind of bug this two-phase approach avoids. The one-render flash from
+// default -> restored value is the standard, accepted trade-off.
+function usePersistentState(key, defaultValue) {
+  const [state, setState] = useState(defaultValue);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw !== null) setState(JSON.parse(raw));
+    } catch {
+      // Storage unavailable or corrupt — just keep the default.
+    }
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // read only once, on mount
+
+  useEffect(() => {
+    if (!hydrated) return; // don't clobber the persisted value with the default before we've read it
+    try {
+      window.localStorage.setItem(key, JSON.stringify(state));
+    } catch {
+      // Storage full or unavailable — this session just won't survive a
+      // reload; never let a quota error break the app.
+    }
+  }, [key, state, hydrated]);
+
+  return [state, setState];
+}
+
 /* --------------------------- SMALL UI ATOMS ------------------------------ */
 
 // Brand mark — isometric hex-head hammer with wrapped grip and dangling
@@ -244,16 +287,16 @@ function ProGate({ isPro, title, description, onUpgrade, badge = "PRO", children
 /* ====================== MODULE A — VISUAL ASSESSOR ======================= */
 
 function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
-  const [image, setImage] = useState(null);        // { data, mediaType, previewUrl }
-  const [description, setDescription] = useState("");
+  const [image, setImage] = usePersistentState("diyvspro_session_assess_image", null); // { data, mediaType, previewUrl }
+  const [description, setDescription] = usePersistentState("diyvspro_session_assess_description", "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState(null);
+  const [result, setResult] = usePersistentState("diyvspro_session_assess_result", null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
   const [mockupBusy, setMockupBusy] = useState(false);
   const [mockupError, setMockupError] = useState("");
-  const [mockupImage, setMockupImage] = useState(null);
+  const [mockupImage, setMockupImage] = usePersistentState("diyvspro_session_assess_mockup", null);
 
   const visualizeFix = async () => {
     if (!image || !result) return;
@@ -286,7 +329,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
   const loadFile = (file) => {
     if (!file || !file.type.startsWith("image/")) { setError("Please drop a JPG or PNG photo."); return; }
     setError("");
-    const previewUrl = URL.createObjectURL(file);
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       // Downscale to keep the base64 payload well under the platform's ~4.5MB
@@ -298,10 +341,13 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
       canvas.height = Math.round(img.height * scale);
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      setImage({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl });
+      URL.revokeObjectURL(objectUrl);
+      // previewUrl is the same data URL used for the API payload — plain
+      // JSON (unlike an object URL), so it survives localStorage persistence.
+      setImage({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl: dataUrl });
     };
-    img.onerror = () => { setError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(previewUrl); };
-    img.src = previewUrl;
+    img.onerror = () => { setError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(objectUrl); };
+    img.src = objectUrl;
   };
 
   // Vision analysis: strict-JSON prompt so the response can drive the estimator.
@@ -741,24 +787,24 @@ function DecisionMatrix({ diy, pro, verdict, timeValue, setTimeValue, diyHours, 
 const SEVERITIES = ["low", "medium", "high"];
 
 function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims, setRoomDims, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
-  const [severity, setSeverity] = useState(analysis?.severity || "medium");
+  const [severity, setSeverity] = usePersistentState("diyvspro_session_guide_severity", analysis?.severity || "medium");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [guide, setGuide] = useState(null);
-  const [beginnerMode, setBeginnerMode] = useState(true);
+  const [guide, setGuide] = usePersistentState("diyvspro_session_guide_result", null);
+  const [beginnerMode, setBeginnerMode] = usePersistentState("diyvspro_session_guide_beginner", true);
 
   const [showMeasure, setShowMeasure] = useState(false);
-  const [measurePhoto, setMeasurePhoto] = useState(null); // { data, mediaType, previewUrl }
-  const [refObject, setRefObject] = useState("a4");
+  const [measurePhoto, setMeasurePhoto] = usePersistentState("diyvspro_session_guide_measurephoto", null); // { data, mediaType, previewUrl }
+  const [refObject, setRefObject] = usePersistentState("diyvspro_session_guide_refobject", "a4");
   const [measureBusy, setMeasureBusy] = useState(false);
   const [measureError, setMeasureError] = useState("");
-  const [measureResult, setMeasureResult] = useState(null); // { confidence, notes }
+  const [measureResult, setMeasureResult] = usePersistentState("diyvspro_session_guide_measureresult", null); // { confidence, notes }
   const measureFileRef = useRef(null);
 
   const loadMeasurePhoto = (file) => {
     if (!file || !file.type.startsWith("image/")) { setMeasureError("Please choose a JPG or PNG photo."); return; }
     setMeasureError("");
-    const previewUrl = URL.createObjectURL(file);
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       // Downscale to keep the base64 payload well under the platform's ~4.5MB
@@ -770,10 +816,11 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
       canvas.height = Math.round(img.height * scale);
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      setMeasurePhoto({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl });
+      URL.revokeObjectURL(objectUrl);
+      setMeasurePhoto({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl: dataUrl });
     };
-    img.onerror = () => { setMeasureError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(previewUrl); };
-    img.src = previewUrl;
+    img.onerror = () => { setMeasureError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(objectUrl); };
+    img.src = objectUrl;
   };
 
   const estimateFromPhoto = async () => {
@@ -1193,11 +1240,11 @@ function ToolCard({ tool }) {
 }
 
 function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
-  const [tools, setTools] = useState([]);
-  const [notes, setNotes] = useState({});
+  const [tools, setTools] = usePersistentState("diyvspro_session_shopping_tools", []);
+  const [notes, setNotes] = usePersistentState("diyvspro_session_shopping_notes", {});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [generated, setGenerated] = useState(false);
+  const [generated, setGenerated] = usePersistentState("diyvspro_session_shopping_generated", false);
 
   const generate = async () => {
     setBusy(true); setError("");
@@ -1293,21 +1340,21 @@ function SpecRow({ label, children }) {
 }
 
 function DesignStudio({ deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
-  const [scope, setScope] = useState("room");
-  const [style, setStyle] = useState("modern");
-  const [notes, setNotes] = useState("");
-  const [photo, setPhoto] = useState(null); // { data, mediaType, previewUrl }
+  const [scope, setScope] = usePersistentState("diyvspro_session_design_scope", "room");
+  const [style, setStyle] = usePersistentState("diyvspro_session_design_style", "modern");
+  const [notes, setNotes] = usePersistentState("diyvspro_session_design_notes", "");
+  const [photo, setPhoto] = usePersistentState("diyvspro_session_design_photo", null); // { data, mediaType, previewUrl }
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [spec, setSpec] = useState(null);
-  const [image, setImage] = useState(null);
+  const [spec, setSpec] = usePersistentState("diyvspro_session_design_spec", null);
+  const [image, setImage] = usePersistentState("diyvspro_session_design_image", null);
 
   const loadPhoto = (file) => {
     if (!file || !file.type.startsWith("image/")) { setError("Please drop a JPG or PNG photo."); return; }
     setError("");
-    const previewUrl = URL.createObjectURL(file);
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       // Downscale to keep the base64 payload well under the platform's ~4.5MB
@@ -1320,10 +1367,11 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, isPro, onUpgrade })
       canvas.height = Math.round(img.height * scale);
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      setPhoto({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl });
+      URL.revokeObjectURL(objectUrl);
+      setPhoto({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl: dataUrl });
     };
-    img.onerror = () => { setError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(previewUrl); };
-    img.src = previewUrl;
+    img.onerror = () => { setError("Couldn't read that photo — try a different file."); URL.revokeObjectURL(objectUrl); };
+    img.src = objectUrl;
   };
 
   const generate = async () => {
@@ -1508,17 +1556,21 @@ const TABS = [
 ];
 
 export default function DIYvsProDashboard() {
-  const [tab, setTab] = useState("assess");
+  // Research/results state (below) is persisted to localStorage via
+  // usePersistentState so a demo/session survives a refresh or closed tab —
+  // ephemeral UI/paywall state (access, modals, busy/error flags) stays on
+  // plain useState.
+  const [tab, setTab] = usePersistentState("diyvspro_session_tab", "assess");
 
   /* ------- shared state: every module reads/writes this single source ------ */
-  const [materials, setMaterials] = useState([]);
-  const [tier, setTier] = useState("budget");
-  const [travel, setTravel] = useState({ mpg: 0, miles: 0, trips: 0, fuelPrice: 0 });
-  const [labour, setLabour] = useState({ postcode: "", tradeId: "", dayRate: 0, days: 0, actualQuote: 0, markup: 0 });
-  const [timeValue, setTimeValue] = useState(0);    // £/hr the user values their own time at
-  const [diyHours, setDiyHours] = useState(0);
-  const [analysis, setAnalysis] = useState(null);   // last vision result (safety flag lives here)
-  const [roomDims, setRoomDims] = useState({ length: 0, width: 0 });
+  const [materials, setMaterials] = usePersistentState("diyvspro_session_materials", []);
+  const [tier, setTier] = usePersistentState("diyvspro_session_tier", "budget");
+  const [travel, setTravel] = usePersistentState("diyvspro_session_travel", { mpg: 0, miles: 0, trips: 0, fuelPrice: 0 });
+  const [labour, setLabour] = usePersistentState("diyvspro_session_labour", { postcode: "", tradeId: "", dayRate: 0, days: 0, actualQuote: 0, markup: 0 });
+  const [timeValue, setTimeValue] = usePersistentState("diyvspro_session_timevalue", 0); // £/hr the user values their own time at
+  const [diyHours, setDiyHours] = usePersistentState("diyvspro_session_diyhours", 0);
+  const [analysis, setAnalysis] = usePersistentState("diyvspro_session_analysis", null); // last vision result (safety flag lives here)
+  const [roomDims, setRoomDims] = usePersistentState("diyvspro_session_roomdims", { length: 0, width: 0 });
   const [bgImage, setBgImage] = useState(null);     // ambient background photo — purely decorative
   const [showDonate, setShowDonate] = useState(false);
   const [donateAmount, setDonateAmount] = useState(5);
@@ -1533,6 +1585,17 @@ export default function DIYvsProDashboard() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
+
+  // Deliberate escape hatch for the auto-saved session above — clears every
+  // diyvspro_session_* key (prefix-matched, so it stays correct even as new
+  // persisted fields are added) and reloads to a clean first-run state.
+  const clearSession = () => {
+    if (!window.confirm("Clear the saved diagnosis, guides, and design results on this device? This can't be undone.")) return;
+    Object.keys(window.localStorage)
+      .filter((k) => k.startsWith("diyvspro_session_"))
+      .forEach((k) => window.localStorage.removeItem(k));
+    window.location.reload();
+  };
 
   /* ---------------------- FREE / PRO / CONTRACTOR paywall -------------------
      A per-browser device ID (localStorage) tracks tier state. Real
@@ -1984,6 +2047,7 @@ export default function DIYvsProDashboard() {
         <button onClick={() => setShowFeedback(true)} className="font-semibold underline flex items-center gap-1 shrink-0" style={{ color: T.blue }}>
           <MessageSquare size={12} /> Give feedback
         </button>
+        <button onClick={clearSession} className="font-semibold underline shrink-0" style={{ color: T.faint }}>Clear session</button>
         <a href="/admin" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Admin</a>
         <a href="/pricing" className="font-semibold underline shrink-0" style={{ color: T.blue }}>Pricing</a>
         <a href="/terms" className="font-semibold underline shrink-0" style={{ color: T.faint }}>Terms</a>
