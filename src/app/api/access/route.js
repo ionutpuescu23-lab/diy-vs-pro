@@ -1,6 +1,7 @@
 // src/app/api/access/route.js
-// Read-only check: does this device still have free trial uses, or is it unlocked?
-// Does not consume a use — the AI routes themselves call consumeAccess().
+// Read-only check: what tier is this device on, and how many free monthly
+// diagnoses does it have left? Never mutates — the estimate route itself
+// calls checkEstimateGate()/recordEstimateUse().
 import { getAccessState } from "@/lib/access";
 
 export async function GET(request) {

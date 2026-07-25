@@ -4,7 +4,7 @@
 // real money per call (unlike Claude's per-token pricing), so this defaults
 // to "low" quality to keep per-generation cost down — it's a bonus visual,
 // not a core feature.
-import { consumeAccess } from "@/lib/access";
+import { checkFeatureAccess } from "@/lib/access";
 
 // OpenAI image edits can run long — extend past the platform default timeout.
 export const maxDuration = 60;
@@ -20,9 +20,12 @@ export async function POST(request) {
     if (!deviceId) {
       return Response.json({ error: "Missing device ID" }, { status: 400 });
     }
-    const access = await consumeAccess(deviceId);
+    const access = await checkFeatureAccess(deviceId, "pro");
     if (!access.allowed) {
-      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
+      return Response.json(
+        { error: "Visualizing the fix is a PRO feature", paywall: true, requiredTier: "pro", state: access.state },
+        { status: 402 }
+      );
     }
 
     const apiKey = process.env.OPENAI_API_KEY;

@@ -6,31 +6,42 @@ export default function RefundPage() {
       <div className="max-w-3xl mx-auto">
         <a href="/" className="text-sm underline" style={{ color: "#60A5FA" }}>← Back to DIY vs PRO</a>
         <h1 className="text-2xl font-black uppercase tracking-wide mt-4">Refund Policy</h1>
-        <p className="text-xs mt-1 mb-8" style={{ color: "#94A3B8" }}>Last updated: 9 July 2026</p>
+        <p className="text-xs mt-1 mb-8" style={{ color: "#94A3B8" }}>Last updated: 24 July 2026</p>
 
-        <Section title="1. Digital goods, delivered immediately">
+        <Section title="1. Plans">
           <P>
-            "Unlock full access" and "Unlock Design Studio" are one-time purchases for digital services that are
-            unlocked immediately on your device once payment completes.
+            DIY vs PRO offers three plans: a free plan with a limited number of monthly photo diagnoses; PRO, either
+            a one-time purchase for lifetime access or a monthly subscription, unlocking unlimited diagnoses,
+            step-by-step guides, the materials & tools guide, and Design Studio; and CONTRACTOR, a monthly
+            subscription that includes everything in PRO. Only the PRO one-time purchase is non-recurring — PRO
+            monthly and CONTRACTOR are recurring subscriptions that renew automatically until cancelled.
           </P>
         </Section>
 
         <Section title="2. Your cancellation rights">
           <P>
             Under the UK Consumer Contracts Regulations 2013, you normally have a 14-day right to cancel a digital
-            purchase. By choosing to unlock a feature, you acknowledge that access begins immediately and you
-            expressly agree to waive the 14-day cancellation right once you've started using the unlocked feature,
-            as permitted under those regulations.
+            purchase. By choosing to upgrade, you acknowledge that access begins immediately and you expressly
+            agree to waive the 14-day cancellation right once you've started using the unlocked features, as
+            permitted under those regulations.
+          </P>
+          <P>
+            You can cancel a PRO or CONTRACTOR subscription at any time — access continues until the end of the
+            billing period you've already paid for, and you won't be charged again after that.
           </P>
         </Section>
 
         <Section title="3. When we'll issue a refund">
           <List items={[
-            "A technical fault on our side prevented the unlock from taking effect at all.",
-            "You were charged more than once for the same unlock (duplicate transaction).",
+            "A technical fault on our side prevented the upgrade from taking effect at all.",
+            "You were charged more than once for the same purchase (duplicate transaction), or charged for a subscription renewal after you'd already cancelled.",
             "The payment was unauthorised or fraudulent.",
           ]} />
           <P>Outside of these situations, refunds are considered case-by-case — contact us and explain what happened.</P>
+          <P>
+            A refund of the PRO one-time purchase reverts your device to the free plan immediately. Cancelling a
+            subscription stops future billing but does not itself trigger a refund of the current period.
+          </P>
         </Section>
 
         <Section title="4. How to request a refund">

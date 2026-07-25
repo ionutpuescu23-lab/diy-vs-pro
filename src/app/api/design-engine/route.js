@@ -3,7 +3,7 @@
 // both an early-concept redesign spec (Claude) and an edited "what it could
 // look like" render of that same photo (OpenAI images/edits — grounded in
 // the real space, not a from-scratch generation).
-import { checkArchitectureAccess } from "@/lib/access";
+import { checkFeatureAccess } from "@/lib/access";
 
 // Chains a Claude call and an OpenAI image-edit call — comfortably past most
 // platform default timeouts, hence the explicit bump.
@@ -39,9 +39,12 @@ export async function POST(request) {
     if (!imageData) {
       return Response.json({ error: "Please upload a photo of the room or garden" }, { status: 400 });
     }
-    const access = await checkArchitectureAccess(deviceId);
+    const access = await checkFeatureAccess(deviceId, "pro");
     if (!access.allowed) {
-      return Response.json({ error: "Design Studio isn't unlocked yet", paywall: true, architecturePaywall: true, state: access.state }, { status: 402 });
+      return Response.json(
+        { error: "Design Studio is a PRO feature", paywall: true, requiredTier: "pro", state: access.state },
+        { status: 402 }
+      );
     }
 
     const anthropicKey = process.env.ANTHROPIC_API_KEY;

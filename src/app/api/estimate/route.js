@@ -1,7 +1,7 @@
 // src/app/api/estimate/route.js
 // App Router rule: folder = URL, file MUST be named route.js,
 // and the export MUST be named after the HTTP method (POST).
-import { consumeAccess } from "@/lib/access";
+import { checkEstimateGate, recordEstimateUse } from "@/lib/access";
 
 // Claude vision analysis can run long — extend past the platform default timeout.
 export const maxDuration = 60;
@@ -19,9 +19,16 @@ export async function POST(request) {
     if (!deviceId) {
       return Response.json({ error: "Missing device ID" }, { status: 400 });
     }
-    const access = await consumeAccess(deviceId);
+    // Pre-check only — does not consume a use. That happens after a
+    // successful response is parsed below, so a request that fails
+    // (upstream error, bad JSON) never costs the user one of their 5
+    // free monthly diagnoses.
+    const access = await checkEstimateGate(deviceId);
     if (!access.allowed) {
-      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
+      return Response.json(
+        { error: "Monthly free limit reached", paywall: true, requiredTier: "pro", state: access.state },
+        { status: 402 }
+      );
     }
 
     const instructions = imageData && description
@@ -83,6 +90,9 @@ Respond with ONLY a raw JSON object (no markdown, no backticks) with exactly the
 
     // Strip accidental markdown fences, then parse the surveyor JSON
     const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+    // Only record the use now that we know the request actually succeeded.
+    await recordEstimateUse(deviceId);
 
     return Response.json(parsed); // 200, clean JSON back to the browser
   } catch (err) {

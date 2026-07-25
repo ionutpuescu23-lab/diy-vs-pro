@@ -6,7 +6,7 @@ export default function TermsPage() {
       <div className="max-w-3xl mx-auto">
         <a href="/" className="text-sm underline" style={{ color: "#60A5FA" }}>← Back to DIY vs PRO</a>
         <h1 className="text-2xl font-black uppercase tracking-wide mt-4">Terms &amp; Conditions</h1>
-        <p className="text-xs mt-1 mb-8" style={{ color: "#94A3B8" }}>Last updated: 9 July 2026</p>
+        <p className="text-xs mt-1 mb-8" style={{ color: "#94A3B8" }}>Last updated: 24 July 2026</p>
 
         <Section title="1. What this service is">
           <P>
@@ -41,9 +41,11 @@ export default function TermsPage() {
 
         <Section title="4. Payments and access">
           <P>
-            The Service offers a limited number of free uses per device, after which continued use of the core
-            features requires a one-time payment ("Unlock full access"). The AI Design Studio feature requires a
-            separate one-time payment. Both are one-off purchases — there is no subscription or recurring charge.
+            The Service offers a free plan with a limited number of photo diagnoses per device each month. PRO
+            (available as a one-time purchase or a monthly subscription) removes that limit and unlocks
+            step-by-step guides, the materials & tools guide, and Design Studio. CONTRACTOR is a monthly
+            subscription that includes everything in PRO. PRO monthly and CONTRACTOR renew automatically each
+            billing period until cancelled; only the PRO one-time purchase is a single, non-recurring charge.
           </P>
           <P>
             Payments are processed securely by Stripe. We never see or store your card details. See our{" "}
@@ -58,15 +60,15 @@ export default function TermsPage() {
         <Section title="5. Device-based access (no account/login)">
           <P>
             The Service does not require you to create an account. Instead, a random identifier is generated and
-            stored in your browser to track free-use allowances and unlocked purchases. Clearing your browser data,
-            switching browsers, or using a different device will be treated as a new, separate user.
+            stored in your browser to track your plan and free-use allowance. Clearing your browser data, switching
+            browsers, or using a different device will be treated as a new, separate user.
           </P>
         </Section>
 
         <Section title="6. Acceptable use">
           <P>
-            You agree not to attempt to circumvent the free-trial or payment system, interfere with the Service's
-            operation, or use it to generate content for unlawful purposes.
+            You agree not to attempt to circumvent the free-plan limits or payment system, interfere with the
+            Service's operation, or use it to generate content for unlawful purposes.
           </P>
         </Section>
 

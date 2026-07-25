@@ -7,20 +7,18 @@
 // the CALLING device is currently is_admin in the DB. This is safe to call
 // from the browser because the check can't be spoofed client-side: we look
 // up callerDeviceId ourselves rather than trusting any flag the client sends.
-import { isDeviceAdmin, getAccessState, setAdminFlag, setUnlockedFlag, setArchitectureFlag } from "@/lib/access";
+import { isDeviceAdmin, getAccessState, setAdminFlag, setDeviceTier } from "@/lib/access";
 
 const ACTIONS = {
   grantAdmin: (id) => setAdminFlag(id, true),
   revokeAdmin: (id) => setAdminFlag(id, false),
-  grantUnlock: (id) => setUnlockedFlag(id, true),
-  revokeUnlock: (id) => setUnlockedFlag(id, false),
-  grantArchitecture: (id) => setArchitectureFlag(id, true),
-  revokeArchitecture: (id) => setArchitectureFlag(id, false),
+  setTier: (id, body) => setDeviceTier(id, { tier: body.tier }),
 };
 
 export async function POST(request) {
   try {
-    const { callerDeviceId, targetDeviceId, action } = await request.json();
+    const body = await request.json();
+    const { callerDeviceId, targetDeviceId, action } = body;
     if (!callerDeviceId || !targetDeviceId || !action) {
       return Response.json({ error: "Missing callerDeviceId, targetDeviceId, or action" }, { status: 400 });
     }
@@ -40,9 +38,9 @@ export async function POST(request) {
       return Response.json({ error: "Unknown action" }, { status: 400 });
     }
 
-    const result = await handler(targetDeviceId);
+    const result = await handler(targetDeviceId, body);
     if (!result.ok) {
-      return Response.json({ error: "Admin storage isn't configured yet" }, { status: 500 });
+      return Response.json({ error: result.reason === "invalid_tier" ? "Invalid tier" : "Admin storage isn't configured yet" }, { status: result.reason === "invalid_tier" ? 400 : 500 });
     }
     return Response.json(result.state);
   } catch (err) {

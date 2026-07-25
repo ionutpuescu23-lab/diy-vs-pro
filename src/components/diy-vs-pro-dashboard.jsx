@@ -9,6 +9,12 @@ import {
   Boxes, Drill, Plug, Fan, Gauge, Info, MessageSquare, Star,
   Building2, Sparkles, Home, Copy
 } from "lucide-react";
+import {
+  FREE_ESTIMATE_USES_PER_MONTH,
+  PRO_ONE_TIME_PRICE_GBP,
+  PRO_MONTHLY_PRICE_GBP,
+  CONTRACTOR_MONTHLY_PRICE_GBP,
+} from "@/lib/pricing";
 
 /* =========================================================================
    DIY vs PRO — Property Calculators & Visual Guide
@@ -90,12 +96,6 @@ const TRADES = [
   { id: "electrician", name: "Electrician (Part P)",     rate: 280, regulated: true  },
   { id: "gas",         name: "Gas Engineer (Gas Safe)",  rate: 300, regulated: true  },
 ];
-
-// Display-only copies of the free-trial/unlock constants enforced server-side
-// in src/lib/access.js — keep these in sync with that file.
-const FREE_TRIAL_USES_DISPLAY = 2;
-const UNLOCK_PRICE_DISPLAY = 4.99;
-
 
 // Keyword -> icon/colour lookup so material & tool cards get a relevant glyph
 // without depending on hotlinked retailer product photos.
@@ -187,9 +187,38 @@ function Panel({ title, icon: Icon, accent = T.blue, children, subtitle }) {
   );
 }
 
+// Pre-emptive PRO gate — blurs its children and shows an upgrade CTA when
+// the device isn't PRO/CONTRACTOR yet, instead of only surfacing a paywall
+// reactively after a 402. Shared across every PRO-only feature panel.
+function ProGate({ isPro, title, description, onUpgrade, badge = "PRO", children }) {
+  return (
+    <div className="space-y-4 relative">
+      {!isPro && (
+        <div className="absolute inset-0 z-10 rounded-xl flex flex-col items-center justify-center p-6 text-center backdrop-blur-md"
+             style={{ background: "rgba(11,13,16,0.6)", border: `1px solid ${T.line}` }}>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+               style={{ background: "rgba(96,165,250,0.12)", border: `1px solid ${T.blue}` }}>
+            <Sparkles size={22} style={{ color: T.blue }} />
+          </div>
+          <h3 className="text-base font-bold" style={{ color: T.ink, fontFamily: "'Archivo', sans-serif" }}>{title}</h3>
+          <p className="text-xs mt-1 mb-4 max-w-xs" style={{ color: T.faint }}>{description}</p>
+          <button onClick={onUpgrade}
+                  className="rounded-lg py-2 px-4 font-bold text-xs text-white"
+                  style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
+            UPGRADE TO {badge}
+          </button>
+        </div>
+      )}
+      <div className={!isPro ? "opacity-30 pointer-events-none select-none" : ""}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /* ====================== MODULE A — VISUAL ASSESSOR ======================= */
 
-function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange }) {
+function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
   const [image, setImage] = useState(null);        // { data, mediaType, previewUrl }
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -203,6 +232,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
 
   const visualizeFix = async () => {
     if (!image || !result) return;
+    if (!isPro) { onUpgrade?.(); return; }
     setMockupBusy(true); setMockupError(""); setMockupImage(null);
     try {
       const response = await fetch("/api/design-mockup", {
@@ -216,7 +246,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
       const data = await response.json();
       onAccessChange?.();
       if (!response.ok) {
-        if (onPaywall?.(response)) return;
+        if (onPaywall?.(response, data)) return;
         throw new Error(data.error || "Mockup generation failed");
       }
       setMockupImage(data.image);
@@ -271,7 +301,7 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
       }
       onAccessChange?.();
       if (!response.ok) {
-        if (onPaywall?.(response)) return;
+        if (onPaywall?.(response, parsed)) return;
         throw new Error(parsed.error || "Analysis failed");
       }
       setResult(parsed);
@@ -383,6 +413,9 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
                         style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
                   {mockupBusy ? <Loader2 size={14} className="animate-spin" /> : "🎨"}
                   {mockupBusy ? "GENERATING MOCKUP…" : "VISUALIZE THE FIX (AI MOCKUP)"}
+                  {!isPro && !mockupBusy && (
+                    <span className="text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5" style={{ background: "rgba(255,255,255,0.2)" }}>PRO</span>
+                  )}
                 </button>
                 {mockupError && <p className="mt-1 text-xs" style={{ color: T.danger }}>{mockupError}</p>}
                 {mockupImage && (
@@ -670,7 +703,7 @@ function DecisionMatrix({ diy, pro, verdict, timeValue, setTimeValue, diyHours, 
 
 const SEVERITIES = ["low", "medium", "high"];
 
-function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims, setRoomDims, deviceId, onPaywall, onAccessChange }) {
+function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims, setRoomDims, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
   const [severity, setSeverity] = useState(analysis?.severity || "medium");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -754,7 +787,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
       const parsed = await response.json();
       onAccessChange?.();
       if (!response.ok) {
-        if (onPaywall?.(response)) return;
+        if (onPaywall?.(response, parsed)) return;
         throw new Error(parsed.error || "Guide generation failed");
       }
       setGuide(parsed);
@@ -764,7 +797,9 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
   };
 
   return (
-    <div className="space-y-4">
+    <ProGate isPro={isPro} onUpgrade={onUpgrade}
+             title="Step-by-Step Guides"
+             description="Generate a phased, beginner-friendly fix plan with UK building regs, safety warnings, and pro-finder links.">
       <Panel title="Job Details" icon={Ruler} subtitle="feeds the AI-generated fix plan">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Field label="Room length" suffix="m" step={0.1} value={roomDims.length}
@@ -997,7 +1032,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
           </Panel>
         </>
       )}
-    </div>
+    </ProGate>
   );
 }
 
@@ -1120,7 +1155,7 @@ function ToolCard({ tool }) {
   );
 }
 
-function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPaywall, onAccessChange }) {
+function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
   const [tools, setTools] = useState([]);
   const [notes, setNotes] = useState({});
   const [busy, setBusy] = useState(false);
@@ -1142,7 +1177,7 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPay
       const parsed = await response.json();
       onAccessChange?.();
       if (!response.ok) {
-        if (onPaywall?.(response)) return;
+        if (onPaywall?.(response, parsed)) return;
         throw new Error(parsed.error || "Guide generation failed");
       }
       const noteMap = {};
@@ -1156,7 +1191,9 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPay
   };
 
   return (
-    <div className="space-y-4">
+    <ProGate isPro={isPro} onUpgrade={onUpgrade}
+             title="Materials & Tools Guide"
+             description="A visual shopping list with quality notes, supplier names, and buy-vs-rent guidance for every material and tool.">
       <Panel title="Materials & Tools Guide" icon={ShoppingCart}
              subtitle="visual shopping list — what to buy, what to rent, and why">
         <p className="text-sm" style={{ color: T.ink }}>
@@ -1191,7 +1228,7 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPay
           {tools.map((t, i) => <ToolCard key={i} tool={t} />)}
         </div>
       </div>
-    </div>
+    </ProGate>
   );
 }
 
@@ -1218,7 +1255,7 @@ function SpecRow({ label, children }) {
   );
 }
 
-function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock, unlockBusy, unlockError }) {
+function DesignStudio({ deviceId, onPaywall, onAccessChange, isPro, onUpgrade }) {
   const [scope, setScope] = useState("room");
   const [style, setStyle] = useState("modern");
   const [notes, setNotes] = useState("");
@@ -1269,8 +1306,7 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
       }
       onAccessChange?.();
       if (!response.ok) {
-        if (parsed.architecturePaywall) throw new Error("Design Studio isn't unlocked on this device yet.");
-        if (onPaywall?.(response)) return;
+        if (onPaywall?.(response, parsed)) return;
         throw new Error(parsed.error || "Design generation failed");
       }
       setSpec(parsed.spec);
@@ -1281,28 +1317,9 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
   };
 
   return (
-    <div className="space-y-4 relative">
-      {!unlocked && (
-        <div className="absolute inset-0 z-10 rounded-xl flex flex-col items-center justify-center p-6 text-center backdrop-blur-md"
-             style={{ background: "rgba(11,13,16,0.6)", border: `1px solid ${T.line}` }}>
-          <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-               style={{ background: "rgba(96,165,250,0.12)", border: `1px solid ${T.blue}` }}>
-            <Sparkles size={22} style={{ color: T.blue }} />
-          </div>
-          <h3 className="text-base font-bold" style={{ color: T.ink, fontFamily: "'Archivo', sans-serif" }}>AI Design Studio</h3>
-          <p className="text-xs mt-1 mb-4 max-w-xs" style={{ color: T.faint }}>
-            Upload a photo of your room or garden and get an AI redesign concept — a generated "what it could look
-            like" render plus an early-concept spec. A one-time unlock, separate from the main free trial.
-          </p>
-          <button onClick={onUnlock} disabled={unlockBusy}
-                  className="rounded-lg py-2 px-4 font-bold text-xs text-white disabled:opacity-40"
-                  style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
-            {unlockBusy ? "REDIRECTING…" : "UNLOCK DESIGN STUDIO • £4.99"}
-          </button>
-          {unlockError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{unlockError}</p>}
-        </div>
-      )}
-      <div className={`space-y-4 ${!unlocked ? "opacity-30 pointer-events-none select-none" : ""}`}>
+    <ProGate isPro={isPro} onUpgrade={onUpgrade}
+             title="AI Design Studio"
+             description="Upload a photo of your room or garden and get an AI redesign concept — a generated &ldquo;what it could look like&rdquo; render plus an early-concept spec. Bundled into PRO.">
       <Panel title="Design Studio" icon={Building2}
              subtitle="your room/garden photo -> AI redesign concept + generated render">
         <p className="text-sm" style={{ color: T.ink }}>
@@ -1437,8 +1454,7 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, unlocked, onUnlock,
           </Panel>
         </div>
       )}
-      </div>
-    </div>
+    </ProGate>
   );
 }
 
@@ -1481,18 +1497,24 @@ export default function DIYvsProDashboard() {
     }
   }, []);
 
-  /* ---------------------- free trial / unlock paywall ----------------------
-     A per-browser device ID (localStorage) tracks a shared free-trial pool
-     across every AI-costing action. Real enforcement happens server-side in
-     each route (see src/lib/access.js) — this is just the UI reflecting that
-     state and offering the one-time unlock when the trial runs out. */
+  /* ---------------------- FREE / PRO / CONTRACTOR paywall -------------------
+     A per-browser device ID (localStorage) tracks tier state. Real
+     enforcement happens server-side in each route (see src/lib/access.js) —
+     this is just the UI reflecting that state and offering the upgrade
+     modal when a FREE-tier limit or a PRO-only feature is hit. */
   const [deviceId, setDeviceId] = useState(null);
-  const [access, setAccess] = useState(null); // { unlocked, trial_uses_remaining, configured }
-  const [showUnlock, setShowUnlock] = useState(false);
-  const [unlockBusy, setUnlockBusy] = useState(false);
-  const [unlockError, setUnlockError] = useState("");
-  const [unlockBanner, setUnlockBanner] = useState(null); // "success" | "cancelled" | null
+  const [access, setAccess] = useState(null); // { tier, is_admin, estimate_uses_remaining, configured, ... }
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [checkoutConflict, setCheckoutConflict] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalError, setPortalError] = useState("");
+  const [upgradeReason, setUpgradeReason] = useState("");
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutBanner, setCheckoutBanner] = useState(null); // { status: "pending"|"success"|"delayed"|"cancelled", plan }
   const [deviceIdCopied, setDeviceIdCopied] = useState(false);
+
+  const isPro = !!(access?.is_admin || (access?.tier && access.tier !== "free"));
 
   // Lets a user (or someone walking them through support) grab their device
   // ID without needing DevTools — especially useful on mobile, where reading
@@ -1509,25 +1531,14 @@ export default function DIYvsProDashboard() {
     let id = window.localStorage.getItem("diyvspro_device_id");
     if (!id) { id = crypto.randomUUID(); window.localStorage.setItem("diyvspro_device_id", id); }
     setDeviceId(id);
-
-    const status = new URLSearchParams(window.location.search).get("unlock");
-    if (status === "success" || status === "cancelled") {
-      setUnlockBanner(status);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
   }, []);
 
-  // Design Studio's own one-time unlock — separate purchase from the main
-  // trial/unlock above, tracked via the same access-state row's
-  // architecture_unlocked column.
-  const [archUnlockBusy, setArchUnlockBusy] = useState(false);
-  const [archUnlockError, setArchUnlockError] = useState("");
-  const [archUnlockBanner, setArchUnlockBanner] = useState(null); // "success" | "cancelled" | null
-
   useEffect(() => {
-    const status = new URLSearchParams(window.location.search).get("archUnlock");
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("checkout");
+    const plan = params.get("plan");
     if (status === "success" || status === "cancelled") {
-      setArchUnlockBanner(status);
+      setCheckoutBanner({ status: status === "success" ? "pending" : "cancelled", plan });
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -1539,24 +1550,41 @@ export default function DIYvsProDashboard() {
       .catch(() => {});
   };
 
-  useEffect(() => { if (deviceId) refreshAccess(deviceId); }, [deviceId, unlockBanner, archUnlockBanner]);
+  useEffect(() => { if (deviceId) refreshAccess(deviceId); }, [deviceId]);
 
-  const handleUnlockArchitecture = async () => {
-    setArchUnlockBusy(true); setArchUnlockError("");
-    try {
-      const response = await fetch("/api/unlock-architecture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Couldn't start checkout");
-      window.location.href = data.url;
-    } catch (e) {
-      setArchUnlockError(e.message || "Couldn't start checkout — try again.");
-      setArchUnlockBusy(false);
-    }
-  };
+  // Once Stripe redirects back with ?checkout=success, don't just trust the
+  // URL param — poll /api/access (which reflects the webhook-confirmed
+  // state) a few times to tolerate webhook lag before showing a celebratory
+  // banner. Only re-runs when a *new* pending banner appears, not on every
+  // access refresh, so it can't get stuck re-polling forever.
+  useEffect(() => {
+    if (!checkoutBanner || checkoutBanner.status !== "pending" || !deviceId) return;
+    let cancelled = false;
+    const poll = async (delayMs) => {
+      if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+      if (cancelled) return null;
+      try {
+        const r = await fetch(`/api/access?deviceId=${encodeURIComponent(deviceId)}`);
+        const state = await r.json();
+        if (cancelled) return null;
+        setAccess(state);
+        return state;
+      } catch { return null; }
+    };
+    (async () => {
+      for (const delay of [0, 2000, 4000]) {
+        const state = await poll(delay);
+        if (cancelled) return;
+        if (state?.tier && state.tier !== "free") {
+          setCheckoutBanner((b) => (b ? { ...b, status: "success" } : b));
+          return;
+        }
+      }
+      if (!cancelled) setCheckoutBanner((b) => (b && b.status === "pending" ? { ...b, status: "delayed" } : b));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutBanner?.status === "pending", deviceId]);
 
   // Mini admin panel — only reachable via the header badge, which only
   // renders when access.is_admin is already true. Every action still goes
@@ -1568,7 +1596,7 @@ export default function DIYvsProDashboard() {
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminError, setAdminError] = useState("");
 
-  const adminAction = async (action) => {
+  const adminAction = async (action, extra = {}) => {
     const targetDeviceId = adminTargetId.trim();
     if (!targetDeviceId) { setAdminError("Enter a device ID first."); return; }
     setAdminBusy(true); setAdminError("");
@@ -1576,7 +1604,7 @@ export default function DIYvsProDashboard() {
       const response = await fetch("/api/admin/manage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callerDeviceId: deviceId, targetDeviceId, action }),
+        body: JSON.stringify({ callerDeviceId: deviceId, targetDeviceId, action, ...extra }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Action failed");
@@ -1590,26 +1618,55 @@ export default function DIYvsProDashboard() {
   };
 
   // Passed down to every AI-costing tab: call after a fetch response comes
-  // back so a 402 (trial exhausted) pops the paywall instead of a generic error.
-  const handlePaywall = (response) => {
-    if (response.status === 402) { setShowUnlock(true); return true; }
+  // back so a 402 (monthly limit hit or PRO-only feature) pops the upgrade
+  // modal instead of a generic error.
+  const handlePaywall = (response, body) => {
+    if (response.status === 402) {
+      setUpgradeReason(body?.error || "");
+      setCheckoutConflict(false);
+      setShowUpgrade(true);
+      return true;
+    }
     return false;
   };
 
-  const handleUnlock = async () => {
-    setUnlockBusy(true); setUnlockError("");
+  const startCheckout = async (plan, billing) => {
+    setCheckoutBusy(true); setCheckoutError(""); setCheckoutConflict(false);
     try {
-      const response = await fetch("/api/unlock", {
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, plan, billing }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (response.status === 409 && data.usePortal) setCheckoutConflict(true);
+        throw new Error(data.error || "Couldn't start checkout");
+      }
+      window.location.href = data.url;
+    } catch (e) {
+      setCheckoutError(e.message || "Couldn't start checkout — try again.");
+    } finally {
+      setCheckoutBusy(false);
+    }
+  };
+
+  // Opens the Stripe-hosted Customer Portal — self-service card update,
+  // invoice history, plan switching, and cancellation for PRO/CONTRACTOR.
+  const openBillingPortal = async () => {
+    setPortalBusy(true); setPortalError("");
+    try {
+      const response = await fetch("/api/billing-portal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Couldn't start checkout");
+      if (!response.ok) throw new Error(data.error || "Couldn't open the billing portal");
       window.location.href = data.url;
     } catch (e) {
-      setUnlockError(e.message || "Couldn't start checkout — try again.");
-      setUnlockBusy(false);
+      setPortalError(e.message || "Couldn't open the billing portal — try again.");
+      setPortalBusy(false);
     }
   };
 
@@ -1763,19 +1820,31 @@ export default function DIYvsProDashboard() {
               ★ Admin
             </button>
           )}
-          {access?.configured && !access.is_admin && !access.unlocked && (
-            <button onClick={() => setShowUnlock(true)}
+          {access?.configured && !access.is_admin && access.tier === "free" && (
+            <button onClick={() => { setCheckoutConflict(false); setShowUpgrade(true); }}
                     className="rounded px-3 py-1.5 text-xs font-bold uppercase"
                     style={{ background: T.pro, color: "white", fontFamily: "'Archivo', sans-serif", letterSpacing: "0.05em" }}>
-              {num(access.trial_uses_remaining) > 0
-                ? `${access.trial_uses_remaining} free ${access.trial_uses_remaining === 1 ? "use" : "uses"} left`
-                : "Unlock full access"}
+              {num(access.estimate_uses_remaining) > 0
+                ? `${access.estimate_uses_remaining}/${FREE_ESTIMATE_USES_PER_MONTH} free this month`
+                : "Monthly limit reached"}
             </button>
           )}
-          {access?.configured && !access.is_admin && access?.unlocked && (
-            <span className="rounded px-3 py-1.5 text-xs font-bold uppercase" style={{ background: T.diySoft, color: T.diy }}>
-              ✓ Unlocked
-            </span>
+          {access?.configured && !access.is_admin && access.tier === "pro" && (
+            <button onClick={openBillingPortal} disabled={portalBusy}
+                    className="rounded px-3 py-1.5 text-xs font-bold uppercase disabled:opacity-60"
+                    style={{ background: T.diySoft, color: T.diy }}>
+              {portalBusy ? "…" : "✓ PRO · Manage billing"}
+            </button>
+          )}
+          {access?.configured && !access.is_admin && access.tier === "contractor" && (
+            <button onClick={openBillingPortal} disabled={portalBusy}
+                    className="rounded px-3 py-1.5 text-xs font-bold uppercase disabled:opacity-60"
+                    style={{ background: T.amberSoft, color: T.amber }}>
+              {portalBusy ? "…" : "★ CONTRACTOR · Manage billing"}
+            </button>
+          )}
+          {portalError && (
+            <span className="text-xs" style={{ color: T.danger }}>{portalError}</span>
           )}
           <button onClick={() => setShowDonate(true)}
                   className="rounded px-3 py-1.5 text-xs font-bold uppercase border"
@@ -1818,33 +1887,27 @@ export default function DIYvsProDashboard() {
             <button onClick={() => setDonationBanner(null)} aria-label="Dismiss">✕</button>
           </div>
         )}
-        {unlockBanner && (
+        {checkoutBanner && (
           <div className="mb-4 rounded-lg p-3 text-sm font-semibold flex items-center justify-between"
-               style={{ background: unlockBanner === "success" ? T.diySoft : T.proSoft,
-                        color: unlockBanner === "success" ? T.diy : T.pro }}>
+               style={{ background: checkoutBanner.status === "success" ? T.diySoft
+                                   : checkoutBanner.status === "cancelled" ? T.proSoft : T.amberSoft,
+                        color: checkoutBanner.status === "success" ? T.diy
+                             : checkoutBanner.status === "cancelled" ? T.pro : T.amber }}>
             <span>
-              {unlockBanner === "success"
-                ? "Unlocked! Thanks for your purchase — enjoy unlimited access. 🎉"
-                : "Purchase cancelled — no charge was made."}
+              {checkoutBanner.status === "success" &&
+                `${checkoutBanner.plan === "contractor" ? "CONTRACTOR" : "PRO"} activated! Thanks for upgrading. 🎉`}
+              {checkoutBanner.status === "pending" && "Payment received — activating your account…"}
+              {checkoutBanner.status === "delayed" &&
+                "Payment received but still activating — this can take a minute. Refresh shortly, or contact support if it doesn't update."}
+              {checkoutBanner.status === "cancelled" && "Checkout cancelled — no charge was made."}
             </span>
-            <button onClick={() => setUnlockBanner(null)} aria-label="Dismiss">✕</button>
-          </div>
-        )}
-        {archUnlockBanner && (
-          <div className="mb-4 rounded-lg p-3 text-sm font-semibold flex items-center justify-between"
-               style={{ background: archUnlockBanner === "success" ? T.diySoft : T.proSoft,
-                        color: archUnlockBanner === "success" ? T.diy : T.pro }}>
-            <span>
-              {archUnlockBanner === "success"
-                ? "Design Studio unlocked! Head to tab 7 to generate a concept. 🎉"
-                : "Purchase cancelled — no charge was made."}
-            </span>
-            <button onClick={() => setArchUnlockBanner(null)} aria-label="Dismiss">✕</button>
+            <button onClick={() => setCheckoutBanner(null)} aria-label="Dismiss">✕</button>
           </div>
         )}
         {tab === "assess" && (
           <VisualAssessor
             deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
+            isPro={isPro} onUpgrade={() => setShowUpgrade(true)}
             onAnalysis={(a) => {
               setAnalysis(a);
               // Auto-configure labour from the surveyor's report
@@ -1872,16 +1935,17 @@ export default function DIYvsProDashboard() {
           <StepByStepGuide analysis={analysis} materials={materials} trade={trade}
                             region={region} labour={labour}
                             roomDims={roomDims} setRoomDims={setRoomDims}
-                            deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
+                            deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
+                            isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
         )}
         {tab === "shopping" && (
           <MaterialsToolsGuide materials={materials} tier={tier} analysis={analysis} trade={trade}
-                                deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)} />
+                                deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
+                                isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
         )}
         {tab === "design" && (
           <DesignStudio deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
-                        unlocked={!!(access?.architecture_unlocked || access?.is_admin)}
-                        onUnlock={handleUnlockArchitecture} unlockBusy={archUnlockBusy} unlockError={archUnlockError} />
+                        isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
         )}
       </main>
 
@@ -1943,40 +2007,80 @@ export default function DIYvsProDashboard() {
         </div>
       )}
 
-      {/* Unlock modal — free trial exhausted, one-time payment for unlimited access */}
-      {showUnlock && (
+      {/* Upgrade modal — FREE limit hit or a PRO-only feature was clicked */}
+      {showUpgrade && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(22,33,46,0.55)" }}
-             onClick={() => !unlockBusy && setShowUnlock(false)}>
-          <div className="rounded-lg w-full max-w-sm p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
-            <Eyebrow color={T.pro}>Free trial used up</Eyebrow>
+             onClick={() => !checkoutBusy && setShowUpgrade(false)}>
+          <div className="rounded-lg w-full max-w-md p-5" style={{ background: T.panel }} onClick={(e) => e.stopPropagation()}>
+            <Eyebrow color={T.pro}>Upgrade to PRO</Eyebrow>
             <p className="mt-1 text-sm" style={{ color: T.ink }}>
-              You've used your {FREE_TRIAL_USES_DISPLAY} free AI look-ups (photo analysis, guides, and material
-              lookups). Unlock unlimited access with a one-time payment — no subscription, no recurring charge.
+              {upgradeReason || `The free plan includes ${FREE_ESTIMATE_USES_PER_MONTH} photo diagnoses a month. Upgrade for unlimited diagnoses, step-by-step guides, the materials & tools guide, and Design Studio.`}
             </p>
-            <div className="mt-3 rounded-lg border p-3 flex items-center justify-between" style={{ borderColor: T.line, background: T.paper }}>
-              <span className="text-sm font-semibold" style={{ color: T.ink }}>Unlock unlimited access</span>
-              <span className="text-lg font-black" style={{ color: T.pro, fontFamily: "'Archivo', sans-serif" }}>
-                {money(UNLOCK_PRICE_DISPLAY)}
-              </span>
-            </div>
-            {unlockError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{unlockError}</p>}
-            <div className="mt-4 flex gap-2">
-              <button onClick={() => setShowUnlock(false)} disabled={unlockBusy}
-                      className="flex-1 rounded py-2.5 text-sm font-bold" style={{ color: T.faint, background: T.paper }}>
-                Not now
-              </button>
-              <button onClick={handleUnlock} disabled={unlockBusy}
-                      className="flex-1 rounded py-2.5 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
-                      style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
-                {unlockBusy ? <Loader2 size={16} className="animate-spin" /> : "🔓"} Unlock {money(UNLOCK_PRICE_DISPLAY)}
-              </button>
-            </div>
+
+            {checkoutConflict ? (
+              <div className="mt-3 rounded-lg border p-3" style={{ borderColor: T.line, background: T.paper }}>
+                <p className="text-xs mb-2" style={{ color: T.ink }}>
+                  {checkoutError || "You already have an active plan."} Switching plans, updating your card, and
+                  cancelling all happen from your billing portal.
+                </p>
+                <button onClick={openBillingPortal} disabled={portalBusy}
+                        className="w-full rounded py-2 text-sm font-bold text-white disabled:opacity-40"
+                        style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
+                  {portalBusy ? "Opening…" : "Manage billing"}
+                </button>
+                {portalError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{portalError}</p>}
+              </div>
+            ) : (
+              <>
+                <div className="mt-3 space-y-2">
+                  <div className="rounded-lg border p-3 flex items-center justify-between" style={{ borderColor: T.line, background: T.paper }}>
+                    <div>
+                      <span className="text-sm font-semibold" style={{ color: T.ink }}>PRO — one-time</span>
+                      <p className="text-[11px]" style={{ color: T.faint }}>Pay once, unlimited access forever</p>
+                    </div>
+                    <button onClick={() => startCheckout("pro", "one_time")} disabled={checkoutBusy}
+                            className="rounded py-1.5 px-3 text-sm font-bold text-white disabled:opacity-40"
+                            style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
+                      {money(PRO_ONE_TIME_PRICE_GBP)}
+                    </button>
+                  </div>
+                  <div className="rounded-lg border p-3 flex items-center justify-between" style={{ borderColor: T.line, background: T.paper }}>
+                    <div>
+                      <span className="text-sm font-semibold" style={{ color: T.ink }}>PRO — monthly</span>
+                      <p className="text-[11px]" style={{ color: T.faint }}>Cancel anytime</p>
+                    </div>
+                    <button onClick={() => startCheckout("pro", "monthly")} disabled={checkoutBusy}
+                            className="rounded py-1.5 px-3 text-sm font-bold text-white disabled:opacity-40"
+                            style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
+                      {money(PRO_MONTHLY_PRICE_GBP)}/mo
+                    </button>
+                  </div>
+                  <div className="rounded-lg border p-3 flex items-center justify-between" style={{ borderColor: T.line, background: T.paper }}>
+                    <div>
+                      <span className="text-sm font-semibold" style={{ color: T.ink }}>CONTRACTOR — monthly</span>
+                      <p className="text-[11px]" style={{ color: T.faint }}>Everything in PRO, plus batch uploads, client templates & API access — coming soon</p>
+                    </div>
+                    <button onClick={() => startCheckout("contractor", "monthly")} disabled={checkoutBusy}
+                            className="rounded py-1.5 px-3 text-sm font-bold text-white disabled:opacity-40 shrink-0 ml-2"
+                            style={{ background: T.amber, fontFamily: "'Archivo', sans-serif" }}>
+                      {money(CONTRACTOR_MONTHLY_PRICE_GBP)}/mo
+                    </button>
+                  </div>
+                </div>
+                {checkoutError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{checkoutError}</p>}
+              </>
+            )}
+
+            <button onClick={() => { setShowUpgrade(false); setCheckoutConflict(false); setCheckoutError(""); }} disabled={checkoutBusy}
+                    className="mt-4 w-full rounded py-2.5 text-sm font-bold" style={{ color: T.faint, background: T.paper }}>
+              Not now
+            </button>
           </div>
         </div>
       )}
 
       {/* Admin panel — look up any device's access state, grant/revoke admin,
-          main-unlock, or Design Studio unlock. Only reachable via the header
+          or set a device's tier directly. Only reachable via the header
           badge, which only renders for devices that are already admins. */}
       {showAdminPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(22,33,46,0.55)" }}
@@ -2003,34 +2107,31 @@ export default function DIYvsProDashboard() {
 
             {adminLookup && (
               <div className="mt-3 rounded-lg border p-3 text-xs space-y-1" style={{ borderColor: T.line, background: T.paper, color: T.ink }}>
-                <p>Trial uses remaining: <b>{adminLookup.trial_uses_remaining ?? "—"}</b></p>
-                <p>Main unlock: <b style={{ color: adminLookup.unlocked ? T.diy : T.faint }}>{adminLookup.unlocked ? "unlocked" : "not unlocked"}</b></p>
-                <p>Design Studio: <b style={{ color: adminLookup.architecture_unlocked ? T.diy : T.faint }}>{adminLookup.architecture_unlocked ? "unlocked" : "not unlocked"}</b></p>
+                <p>Tier: <b style={{ color: adminLookup.tier === "free" ? T.faint : T.diy, textTransform: "uppercase" }}>{adminLookup.tier ?? "—"}</b></p>
+                <p>Free uses remaining this month: <b>{adminLookup.estimate_uses_remaining ?? "—"}</b></p>
+                <p>Subscription status: <b>{adminLookup.subscription_status ?? "—"}</b></p>
+                <p>Lifetime PRO: <b style={{ color: adminLookup.pro_lifetime ? T.diy : T.faint }}>{adminLookup.pro_lifetime ? "yes" : "no"}</b></p>
                 <p>Admin: <b style={{ color: adminLookup.is_admin ? T.amber : T.faint }}>{adminLookup.is_admin ? "yes" : "no"}</b></p>
               </div>
             )}
 
             {adminError && <p className="mt-2 text-xs" style={{ color: T.danger }}>{adminError}</p>}
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button onClick={() => adminAction("grantUnlock")} disabled={adminBusy}
-                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.diySoft, color: T.diy }}>
-                Grant unlock
-              </button>
-              <button onClick={() => adminAction("revokeUnlock")} disabled={adminBusy}
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <button onClick={() => adminAction("setTier", { tier: "free" })} disabled={adminBusy}
                       className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.inputBg, color: T.faint }}>
-                Revoke unlock
+                Set FREE
               </button>
-              <button onClick={() => adminAction("grantArchitecture")} disabled={adminBusy}
+              <button onClick={() => adminAction("setTier", { tier: "pro" })} disabled={adminBusy}
                       className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.diySoft, color: T.diy }}>
-                Grant Design Studio
+                Set PRO
               </button>
-              <button onClick={() => adminAction("revokeArchitecture")} disabled={adminBusy}
-                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.inputBg, color: T.faint }}>
-                Revoke Design Studio
+              <button onClick={() => adminAction("setTier", { tier: "contractor" })} disabled={adminBusy}
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.amberSoft, color: T.amber }}>
+                Set CONTRACTOR
               </button>
               <button onClick={() => adminAction("grantAdmin")} disabled={adminBusy}
-                      className="rounded py-2 text-xs font-bold disabled:opacity-40" style={{ background: T.amberSoft, color: T.amber }}>
+                      className="rounded py-2 text-xs font-bold disabled:opacity-40 col-span-2" style={{ background: T.amberSoft, color: T.amber }}>
                 Grant admin
               </button>
               <button onClick={() => adminAction("revokeAdmin")} disabled={adminBusy}

@@ -4,7 +4,7 @@
 // invent business names/phone numbers for a given postcode, which is a hallucination
 // risk. Instead we return the official UK regulator/trade-body directories (real,
 // stable URLs) and tell the user to search them by their own postcode.
-import { consumeAccess } from "@/lib/access";
+import { checkFeatureAccess } from "@/lib/access";
 
 // Claude's phased-plan generation can take longer than the platform default
 // timeout, especially under load — extend it explicitly rather than risk a
@@ -53,9 +53,12 @@ export async function POST(request) {
     if (!deviceId) {
       return Response.json({ error: "Missing device ID" }, { status: 400 });
     }
-    const access = await consumeAccess(deviceId);
+    const access = await checkFeatureAccess(deviceId, "pro");
     if (!access.allowed) {
-      return Response.json({ error: "Free trial used up", paywall: true, state: access.state }, { status: 402 });
+      return Response.json(
+        { error: "Step-by-step guides are a PRO feature", paywall: true, requiredTier: "pro", state: access.state },
+        { status: 402 }
+      );
     }
 
     const roomArea = (parseFloat(roomLength) || 0) * (parseFloat(roomWidth) || 0);

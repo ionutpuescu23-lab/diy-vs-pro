@@ -6,7 +6,7 @@ export default function PrivacyPage() {
       <div className="max-w-3xl mx-auto">
         <a href="/" className="text-sm underline" style={{ color: "#60A5FA" }}>← Back to DIY vs PRO</a>
         <h1 className="text-2xl font-black uppercase tracking-wide mt-4">Privacy Policy</h1>
-        <p className="text-xs mt-1 mb-8" style={{ color: "#94A3B8" }}>Last updated: 9 July 2026</p>
+        <p className="text-xs mt-1 mb-8" style={{ color: "#94A3B8" }}>Last updated: 24 July 2026</p>
 
         <Section title="1. Overview">
           <P>
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
 
         <Section title="2. What we collect">
           <List items={[
-            "A random device identifier, stored in your browser's local storage and in our database — used only to track your free-use allowance and any one-time unlock purchases.",
+            "A random device identifier, stored in your browser's local storage and in our database — used only to track your plan (free/PRO/CONTRACTOR), monthly free-use allowance, and subscription status.",
             "Photos and/or text descriptions you submit for issue diagnosis, step-by-step guides, or Design Studio — sent to our AI providers to generate a response.",
             "Optional feedback you submit (ease-of-use rating, comments) — not linked to your device identifier.",
             "Payment details — handled entirely by Stripe. We never receive or store your card number.",
@@ -30,7 +30,7 @@ export default function PrivacyPage() {
             "Anthropic (Claude API) — photo/description analysis, guide and design-spec generation.",
             "OpenAI — AI-generated images (fix visualisations, Design Studio renders).",
             "Pexels — stock reference photography for material/tool cards.",
-            "Stripe — payment processing for unlocks and donations.",
+            "Stripe — payment processing for subscriptions, one-time purchases, and donations.",
             "Supabase (Postgres) — stores device access state and feedback.",
             "Vercel — application hosting.",
           ]} />
@@ -46,9 +46,9 @@ export default function PrivacyPage() {
 
         <Section title="5. Data retention">
           <P>
-            Device access records are kept indefinitely to preserve your unlock status, unless you ask us to delete
-            them (see below). Photos and descriptions you submit are passed to our AI providers to generate a
-            response and are not separately archived by us beyond what's needed to serve that request.
+            Device access records are kept indefinitely to preserve your plan and subscription status, unless you
+            ask us to delete them (see below). Photos and descriptions you submit are passed to our AI providers to
+            generate a response and are not separately archived by us beyond what's needed to serve that request.
           </P>
         </Section>
 
