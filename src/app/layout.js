@@ -1,5 +1,6 @@
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/service-worker-register";
+import InstallPrompt from "@/components/install-prompt";
 
 export const metadata = {
   title: "DIY vs PRO",
@@ -30,6 +31,7 @@ export default function RootLayout({ children }) {
       <body>
         {children}
         <ServiceWorkerRegister />
+        <InstallPrompt />
       </body>
     </html>
   );
