@@ -83,6 +83,10 @@ const REGION_MULTIPLIERS = {
   BT: 0.85,
 };
 
+// Typical UK petrol/diesel car combined-cycle economy — used as the travel
+// cost fallback whenever the user hasn't entered their own vehicle's mpg.
+const DEFAULT_MPG = 40;
+
 // Baseline national trade day rates (£/day). "regulated" flags safety-critical trades.
 const TRADES = [
   { id: "general",     name: "General Builder",          rate: 230, regulated: false },
@@ -220,7 +224,17 @@ function Eyebrow({ children, color = T.blue }) {
   );
 }
 
+// Matches any valid (possibly incomplete) decimal the user could be mid-way
+// through typing — "", "-", ".", "0.", "0.63" — so partial states never get
+// rejected/reset while still blocking stray non-numeric characters.
+const PARTIAL_DECIMAL_RE = /^-?\d*\.?\d*$/;
+
 // Numeric input with £ / unit adornment. All money edits flow through here.
+// Deliberately type="text" rather than type="number": native number inputs
+// have finicky, browser-inconsistent handling of in-progress decimals
+// (typing "." or ".6" could get silently reset), which showed up as visible
+// glitches while editing. Validating the string ourselves keeps every
+// intermediate typing state under our control.
 function Field({ label, value, onChange, prefix, suffix, step = 1, width = "w-full" }) {
   return (
     <label className={`block ${width}`}>
@@ -229,8 +243,8 @@ function Field({ label, value, onChange, prefix, suffix, step = 1, width = "w-fu
            style={{ borderColor: T.line, background: T.inputBg }}>
         {prefix && <span className="px-2 text-sm" style={{ color: T.faint }}>{prefix}</span>}
         <input
-          type="number" step={step} value={value}
-          onChange={(e) => onChange(e.target.value)}
+          type="text" inputMode="decimal" step={step} value={value}
+          onChange={(e) => { if (PARTIAL_DECIMAL_RE.test(e.target.value)) onChange(e.target.value); }}
           className="w-full px-2 py-1.5 text-sm outline-none"
           style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.ink, background: "transparent" }}
         />
@@ -527,6 +541,29 @@ function VisualAssessor({ onMaterials, onAnalysis, deviceId, onPaywall, onAccess
   );
 }
 
+// A numeric table cell that owns its own draft text, independent of the
+// parent's numeric echo-back. Without this, every keystroke round-trips
+// through `num()` and back into `value`, which silently drops a trailing
+// "." (typing "1." would render back as "1", so the next digit typed
+// produces "15" instead of "1.5") — the exact glitch this fixes. The parent
+// still gets a live `onCommit` on every keystroke for totals to recalculate
+// as you type; only the displayed text stays locally authoritative.
+function NumberCell({ value, onCommit, className, style }) {
+  const [draft, setDraft] = useState(() => String(value));
+  return (
+    <input
+      type="text" inputMode="decimal" value={draft}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (!PARTIAL_DECIMAL_RE.test(v)) return;
+        setDraft(v);
+        onCommit(v);
+      }}
+      className={className} style={style}
+    />
+  );
+}
+
 /* ================ MODULE B — DUAL-TIER MATERIAL PRICE ENGINE ============== */
 
 function MaterialEngine({ materials, setMaterials, tier, setTier, travel, setTravel, travelCost }) {
@@ -586,13 +623,13 @@ function MaterialEngine({ materials, setMaterials, tier, setTier, travel, setTra
                       <input value={m.name} onChange={(e) => edit(m.id, "name", e.target.value)}
                              className="w-full bg-transparent outline-none" style={{ minWidth: "10rem", color: T.ink }} />
                     </td>
-                    <td><input type="number" value={m.qty} onChange={(e) => edit(m.id, "qty", e.target.value)}
+                    <td><NumberCell value={m.qty} onCommit={(v) => edit(m.id, "qty", v)}
                                className="w-16 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
                     <td><input value={m.unit} onChange={(e) => edit(m.id, "unit", e.target.value)}
                                className="w-20 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
-                    <td><input type="number" step="0.5" value={m.budget} onChange={(e) => edit(m.id, "budget", e.target.value)}
+                    <td><NumberCell value={m.budget} onCommit={(v) => edit(m.id, "budget", v)}
                                className="w-24 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
-                    <td><input type="number" step="0.5" value={m.high} onChange={(e) => edit(m.id, "high", e.target.value)}
+                    <td><NumberCell value={m.high} onCommit={(v) => edit(m.id, "high", v)}
                                className="w-24 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
                     <td className="text-right font-semibold" style={{ color: T.ink }}>{money(line)}</td>
                     <td className="text-right">
@@ -615,13 +652,14 @@ function MaterialEngine({ materials, setMaterials, tier, setTier, travel, setTra
       <Panel title="DIY Travel Expenses" icon={Fuel} accent={T.diy}
              subtitle="merchant runs are where DIY budgets quietly leak">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Field label="Vehicle economy" suffix="mpg" value={travel.mpg} onChange={(v) => setTravel({ ...travel, mpg: v })} />
+          <Field label={`Vehicle economy (defaults to ${DEFAULT_MPG} if blank)`} suffix="mpg" value={travel.mpg} onChange={(v) => setTravel({ ...travel, mpg: v })} />
           <Field label="Distance to merchant (one way)" suffix="miles" value={travel.miles} onChange={(v) => setTravel({ ...travel, miles: v })} />
           <Field label="Number of trips" suffix="trips" value={travel.trips} onChange={(v) => setTravel({ ...travel, trips: v })} />
           <Field label="Fuel price" prefix="£" suffix="/litre" step={0.01} value={travel.fuelPrice} onChange={(v) => setTravel({ ...travel, fuelPrice: v })} />
         </div>
         <p className="mt-3 text-sm" style={{ color: T.ink, fontFamily: "'IBM Plex Mono', monospace" }}>
-          {num(travel.trips)} round trips × {num(travel.miles) * 2} mi ÷ {num(travel.mpg)} mpg →
+          {num(travel.trips)} round trips × {num(travel.miles) * 2} mi ÷ {num(travel.mpg) > 0 ? num(travel.mpg) : DEFAULT_MPG} mpg
+          {num(travel.mpg) <= 0 && <span style={{ color: T.faint }}> (assumed)</span>} →
           <span className="font-bold" style={{ color: T.diy }}> {money(travelCost)}</span> added to the DIY column.
         </p>
       </Panel>
@@ -868,7 +906,12 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
           materials, postcode: labour.postcode, regionArea: region.area, deviceId,
         }),
       });
-      const parsed = await response.json();
+      let parsed;
+      try {
+        parsed = await response.json();
+      } catch {
+        throw new Error(`Server error (${response.status}) — the guide generation may have timed out. Try again.`);
+      }
       onAccessChange?.();
       if (!response.ok) {
         if (onPaywall?.(response, parsed)) return;
@@ -876,7 +919,7 @@ function StepByStepGuide({ analysis, materials, trade, region, labour, roomDims,
       }
       setGuide(parsed);
     } catch (e) {
-      setError("Couldn't generate the guide — try again in a moment.");
+      setError(e.message || "Couldn't generate the guide — try again in a moment.");
     } finally { setBusy(false); }
   };
 
@@ -1258,7 +1301,12 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPay
           deviceId,
         }),
       });
-      const parsed = await response.json();
+      let parsed;
+      try {
+        parsed = await response.json();
+      } catch {
+        throw new Error(`Server error (${response.status}) — the guide generation may have timed out. Try again.`);
+      }
       onAccessChange?.();
       if (!response.ok) {
         if (onPaywall?.(response, parsed)) return;
@@ -1270,7 +1318,7 @@ function MaterialsToolsGuide({ materials, tier, analysis, trade, deviceId, onPay
       if (parsed.tools?.length) setTools(parsed.tools);
       setGenerated(true);
     } catch (e) {
-      setError("Couldn't generate the guide — try again in a moment.");
+      setError(e.message || "Couldn't generate the guide — try again in a moment.");
     } finally { setBusy(false); }
   };
 
@@ -1832,8 +1880,13 @@ export default function DIYvsProDashboard() {
   );
 
   // Travel: round-trip miles / mpg -> gallons -> litres (×4.546) × pump price.
+  // mpg falls back to a sensible average (not a literal 1 mpg floor, which
+  // was inflating cost by ~35x whenever the field was left blank/0) — the
+  // user hasn't told us their car's economy yet, so assume a typical one
+  // rather than treating it as almost infinitely thirsty.
   const travelCost = useMemo(() => {
-    const gallons = (num(travel.miles) * 2 * num(travel.trips)) / Math.max(num(travel.mpg), 1);
+    const mpg = num(travel.mpg) > 0 ? num(travel.mpg) : DEFAULT_MPG;
+    const gallons = (num(travel.miles) * 2 * num(travel.trips)) / mpg;
     return gallons * 4.546 * num(travel.fuelPrice);
   }, [travel]);
 
@@ -2069,8 +2122,8 @@ export default function DIYvsProDashboard() {
               {[3, 5, 10].map((amt) => (
                 <button key={amt} onClick={() => setDonateAmount(amt)}
                         className="flex-1 rounded py-2 text-sm font-bold border"
-                        style={{ borderColor: donateAmount === amt ? T.blue : T.line,
-                                 background: donateAmount === amt ? "rgba(96,165,250,0.12)" : T.inputBg, color: T.ink }}>
+                        style={{ borderColor: num(donateAmount) === amt ? T.blue : T.line,
+                                 background: num(donateAmount) === amt ? "rgba(96,165,250,0.12)" : T.inputBg, color: T.ink }}>
                   {money(amt)}
                 </button>
               ))}
@@ -2079,8 +2132,8 @@ export default function DIYvsProDashboard() {
               <span className="block text-xs mb-1" style={{ color: T.faint }}>Or enter a custom amount</span>
               <div className="flex items-center rounded border overflow-hidden" style={{ borderColor: T.line, background: T.inputBg }}>
                 <span className="px-2 text-sm" style={{ color: T.faint }}>£</span>
-                <input type="number" min="1" step="1" value={donateAmount}
-                       onChange={(e) => setDonateAmount(Math.max(1, num(e.target.value)))}
+                <input type="text" inputMode="decimal" value={donateAmount}
+                       onChange={(e) => { if (PARTIAL_DECIMAL_RE.test(e.target.value)) setDonateAmount(e.target.value); }}
                        className="w-full px-2 py-1.5 text-sm outline-none" style={{ fontFamily: "'IBM Plex Mono', monospace", background: "transparent", color: T.ink }} />
               </div>
             </label>
@@ -2090,10 +2143,10 @@ export default function DIYvsProDashboard() {
                       className="flex-1 rounded py-2.5 text-sm font-bold" style={{ color: T.faint, background: T.paper }}>
                 Cancel
               </button>
-              <button onClick={handleDonate} disabled={donateBusy}
+              <button onClick={handleDonate} disabled={donateBusy || num(donateAmount) < 1}
                       className="flex-1 rounded py-2.5 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
                       style={{ background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
-                {donateBusy ? <Loader2 size={16} className="animate-spin" /> : "☕"} Donate {money(donateAmount)}
+                {donateBusy ? <Loader2 size={16} className="animate-spin" /> : "☕"} Donate {money(num(donateAmount))}
               </button>
             </div>
           </div>

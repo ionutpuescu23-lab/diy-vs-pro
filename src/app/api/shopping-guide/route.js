@@ -54,7 +54,11 @@ Use realistic current UK retail/trade/hire pricing (Toolstation, Screwfix, Wicke
       },
       body: JSON.stringify({
         model: "claude-sonnet-5",
-        max_tokens: 2560,
+        // Was 2560 — too tight for materialNotes on several materials plus
+        // up to 6 fully-detailed tools; Claude was hitting the cap mid-JSON
+        // and the truncated output failed to parse (a real, reproducible
+        // "Guide generation failed" / "Unterminated string in JSON" 500).
+        max_tokens: 4096,
         messages: [{ role: "user", content: prompt }],
       }),
     });
