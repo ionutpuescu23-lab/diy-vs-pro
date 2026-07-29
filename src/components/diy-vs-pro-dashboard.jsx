@@ -7,7 +7,7 @@ import {
   ListChecks, Clock, ShieldAlert, PhoneCall, ExternalLink, Ruler,
   Package, Layers, Droplets, Wrench, Scissors, PaintBucket, ShoppingCart,
   Boxes, Drill, Plug, Fan, Gauge, Info, MessageSquare, Star,
-  Building2, Sparkles, Home
+  Building2, Sparkles, Home, FileText
 } from "lucide-react";
 import {
   FREE_ESTIMATE_USES_PER_MONTH,
@@ -1591,6 +1591,310 @@ function DesignStudio({ deviceId, onPaywall, onAccessChange, isPro, onUpgrade })
   );
 }
 
+/* ===================== MODULE H — CLIENT INVOICING ========================= */
+
+// Separate from the app-wide `money()` (which rounds to whole pounds for
+// on-screen estimates) — an actual invoice needs proper pence precision.
+const gbp = (n) =>
+  "£" + (isFinite(n) ? n : 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function InvoiceLineRow({ item, onEdit, onRemove }) {
+  const line = num(item.qty) * num(item.rate);
+  return (
+    <tr className="border-t" style={{ borderColor: T.line }}>
+      <td className="py-1 pr-2">
+        <input value={item.description} onChange={(e) => onEdit(item.id, "description", e.target.value)}
+               placeholder="Description"
+               className="w-full bg-transparent outline-none" style={{ minWidth: "12rem", color: T.ink }} />
+      </td>
+      <td><NumberCell value={item.qty} onCommit={(v) => onEdit(item.id, "qty", v)}
+                 className="w-16 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
+      <td><NumberCell value={item.rate} onCommit={(v) => onEdit(item.id, "rate", v)}
+                 className="w-24 rounded border px-1 py-0.5" style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} /></td>
+      <td className="text-right font-semibold" style={{ color: T.ink }}>{gbp(line)}</td>
+      <td className="text-right">
+        <button onClick={() => onRemove(item.id)} aria-label={`Remove ${item.description || "line item"}`}>
+          <Trash2 size={14} style={{ color: T.faint }} />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+// Gated to CONTRACTOR (not just PRO) — this turns the job you've already
+// costed out into a bill you send to the client, which is a contractor-facing
+// action rather than a homeowner-facing DIY-vs-PRO decision.
+function InvoiceBuilder({ isContractor, onUpgrade, materials, tier, labour, trade, region, pro }) {
+  const [business, setBusiness] = usePersistentState("diyvspro_session_invoice_business", { name: "", email: "", address: "" });
+  const [client, setClient] = usePersistentState("diyvspro_session_invoice_client", { name: "", email: "", address: "" });
+  const [meta, setMeta] = usePersistentState("diyvspro_session_invoice_meta", {
+    invoiceNumber: "", invoiceDate: "", dueDate: "", taxRate: 0, discountRate: 0, notes: "",
+  });
+  const [items, setItems] = usePersistentState("diyvspro_session_invoice_items", [
+    { id: 1, description: "", qty: 1, rate: 0 },
+  ]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  // Default the invoice date to today on first mount — deferred to an effect
+  // (not the initializer) for the same server/client hydration reason every
+  // other usePersistentState field defers its "now"-dependent defaults.
+  useEffect(() => {
+    if (!meta.invoiceDate) setMeta((m) => (m.invoiceDate ? m : { ...m, invoiceDate: new Date().toISOString().slice(0, 10) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const editItem = (id, key, val) =>
+    setItems(items.map((it) => (it.id === id ? { ...it, [key]: key === "description" ? val : num(val) } : it)));
+  const addItem = () => setItems([...items, { id: Date.now(), description: "", qty: 1, rate: 0 }]);
+  const removeItem = (id) => setItems(items.length > 1 ? items.filter((it) => it.id !== id) : items);
+
+  // One-click bridge from Modules B/C (materials + labour) into invoice line
+  // items — the whole point of putting invoicing here instead of a standalone
+  // tool. Materials carry the same markup the Decision Matrix already applies
+  // to the PRO route, so the invoice total matches what Module D quoted.
+  const prefillFromEstimate = () => {
+    const hasContent = items.some((it) => it.description || num(it.qty) !== 1 || num(it.rate) !== 0);
+    if (hasContent && !window.confirm("Replace the current line items with the latest labour + materials estimate?")) return;
+
+    const next = [];
+    if (num(pro.labour) > 0) {
+      next.push({
+        id: Date.now(),
+        description: `${trade.name} labour — ${num(labour.days)} day(s)${region.area ? ` (${region.area})` : ""}`,
+        qty: 1,
+        rate: Math.round(num(pro.labour) * 100) / 100,
+      });
+    }
+    materials.forEach((m, i) => {
+      if (num(m.qty) <= 0) return;
+      const unitRate = (tier === "budget" ? num(m.budget) : num(m.high)) * (1 + num(labour.markup) / 100);
+      next.push({ id: Date.now() + i + 1, description: m.name, qty: num(m.qty), rate: Math.round(unitRate * 100) / 100 });
+    });
+    setItems(next.length ? next : [{ id: Date.now(), description: "", qty: 1, rate: 0 }]);
+  };
+
+  const subtotal = items.reduce((s, it) => s + num(it.qty) * num(it.rate), 0);
+  const discount = subtotal * (num(meta.discountRate) / 100);
+  const taxable = subtotal - discount;
+  const tax = taxable * (num(meta.taxRate) / 100);
+  const total = taxable + tax;
+
+  const exportPdf = async () => {
+    setBusy(true); setError("");
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const marginX = 48;
+      let y = 56;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text("INVOICE", marginX, y);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.text(meta.invoiceNumber || "", 545, y, { align: "right" });
+      y += 18;
+      doc.text(`Date: ${meta.invoiceDate || "-"}`, 545, y, { align: "right" });
+      y += 14;
+      doc.text(`Due: ${meta.dueDate || "-"}`, 545, y, { align: "right" });
+
+      y = 100;
+      doc.setFont("helvetica", "bold");
+      doc.text("From", marginX, y);
+      doc.text("Bill To", 320, y);
+      doc.setFont("helvetica", "normal");
+      const partiesY = y + 16;
+      const writeWrapped = (lines, x, startY, maxWidth) => {
+        let yy = startY;
+        lines.filter(Boolean).forEach((line) => {
+          const split = doc.splitTextToSize(line, maxWidth);
+          doc.text(split, x, yy);
+          yy += split.length * 14;
+        });
+        return yy;
+      };
+      const fromEndY = writeWrapped([business.name, business.email, business.address], marginX, partiesY, 240);
+      const toEndY = writeWrapped([client.name, client.email, client.address], 320, partiesY, 240);
+
+      y = Math.max(fromEndY, toEndY) + 20;
+      doc.setDrawColor(220);
+      doc.line(marginX, y, 545, y);
+      y += 16;
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Description", marginX, y);
+      doc.text("Qty", 360, y, { align: "right" });
+      doc.text("Rate", 450, y, { align: "right" });
+      doc.text("Amount", 545, y, { align: "right" });
+      y += 8;
+      doc.line(marginX, y, 545, y);
+      y += 16;
+      doc.setFont("helvetica", "normal");
+
+      items.forEach((it) => {
+        if (y > 740) { doc.addPage(); y = 56; }
+        doc.text(it.description || "-", marginX, y, { maxWidth: 290 });
+        doc.text(String(num(it.qty)), 360, y, { align: "right" });
+        doc.text(gbp(num(it.rate)), 450, y, { align: "right" });
+        doc.text(gbp(num(it.qty) * num(it.rate)), 545, y, { align: "right" });
+        y += 18;
+      });
+
+      y += 10;
+      doc.line(360, y, 545, y);
+      y += 16;
+      [
+        ["Subtotal", gbp(subtotal)],
+        ["Discount", `-${gbp(discount)}`],
+        ["Tax", gbp(tax)],
+      ].forEach(([label, value]) => {
+        doc.text(label, 450, y, { align: "right" });
+        doc.text(value, 545, y, { align: "right" });
+        y += 16;
+      });
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("Total", 450, y, { align: "right" });
+      doc.text(gbp(total), 545, y, { align: "right" });
+
+      if (meta.notes) {
+        y += 40;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.text(meta.notes, marginX, y, { maxWidth: 497 });
+      }
+
+      const filename = (meta.invoiceNumber || "invoice").replace(/[^a-z0-9\-_]/gi, "_");
+      doc.save(`${filename}.pdf`);
+    } catch (e) {
+      setError("Couldn't generate the PDF — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ProGate isPro={isContractor} onUpgrade={onUpgrade} badge="CONTRACTOR"
+             title="Client Invoicing"
+             description="Turn this job's materials + labour estimate into a branded, client-ready PDF invoice in one click. Bundled into CONTRACTOR.">
+      <Panel title="Invoice" icon={FileText} subtitle="pulls materials + labour straight from your estimate">
+        <button onClick={prefillFromEstimate}
+                className="mb-4 flex items-center gap-1 text-xs font-bold rounded-lg py-2 px-3"
+                style={{ color: "white", background: T.pro, fontFamily: "'Archivo', sans-serif" }}>
+          <Sparkles size={14} /> Prefill from estimate
+        </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold uppercase" style={{ color: T.faint, letterSpacing: "0.06em" }}>Your business</h4>
+            <input value={business.name} onChange={(e) => setBusiness({ ...business, name: e.target.value })}
+                   placeholder="Business name"
+                   className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+            <input value={business.email} onChange={(e) => setBusiness({ ...business, email: e.target.value })}
+                   placeholder="Email"
+                   className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+            <textarea value={business.address} onChange={(e) => setBusiness({ ...business, address: e.target.value })}
+                      placeholder="Address" rows={2}
+                      className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                      style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+          </div>
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold uppercase" style={{ color: T.faint, letterSpacing: "0.06em" }}>Bill to</h4>
+            <input value={client.name} onChange={(e) => setClient({ ...client, name: e.target.value })}
+                   placeholder="Client / company"
+                   className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+            <input value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })}
+                   placeholder="Client email"
+                   className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+            <textarea value={client.address} onChange={(e) => setClient({ ...client, address: e.target.value })}
+                      placeholder="Client address" rows={2}
+                      className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                      style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <label className="block">
+            <span className="block text-xs mb-1" style={{ color: T.faint }}>Invoice #</span>
+            <input value={meta.invoiceNumber} onChange={(e) => setMeta({ ...meta, invoiceNumber: e.target.value })}
+                   placeholder="INV-0001"
+                   className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+          </label>
+          <label className="block">
+            <span className="block text-xs mb-1" style={{ color: T.faint }}>Date</span>
+            <input type="date" value={meta.invoiceDate} onChange={(e) => setMeta({ ...meta, invoiceDate: e.target.value })}
+                   className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+          </label>
+          <label className="block">
+            <span className="block text-xs mb-1" style={{ color: T.faint }}>Due date</span>
+            <input type="date" value={meta.dueDate} onChange={(e) => setMeta({ ...meta, dueDate: e.target.value })}
+                   className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                   style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+          </label>
+          <Field label="Tax / VAT" suffix="%" value={meta.taxRate} onChange={(v) => setMeta({ ...meta, taxRate: v })} />
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+            <thead>
+              <tr className="text-left text-xs uppercase" style={{ color: T.faint }}>
+                <th className="py-1 pr-2 font-semibold">Description</th>
+                <th className="py-1 pr-2 font-semibold w-20">Qty</th>
+                <th className="py-1 pr-2 font-semibold w-24">Rate £</th>
+                <th className="py-1 pr-2 font-semibold w-24 text-right">Amount</th>
+                <th className="w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <InvoiceLineRow key={it.id} item={it} onEdit={editItem} onRemove={removeItem} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button onClick={addItem} className="mt-3 flex items-center gap-1 text-xs font-bold" style={{ color: T.blue }}>
+          <Plus size={14} /> Add line item
+        </button>
+
+        <div className="mt-4 flex justify-end">
+          <div className="w-full sm:w-64 space-y-1 text-sm" style={{ color: T.ink }}>
+            <div className="flex justify-between"><span style={{ color: T.faint }}>Subtotal</span><span>{gbp(subtotal)}</span></div>
+            <div className="flex justify-between"><span style={{ color: T.faint }}>Discount</span><span>-{gbp(discount)}</span></div>
+            <div className="flex justify-between"><span style={{ color: T.faint }}>Tax</span><span>{gbp(tax)}</span></div>
+            <div className="flex justify-between font-bold pt-1 border-t" style={{ borderColor: T.line }}>
+              <span>Total</span><span>{gbp(total)}</span>
+            </div>
+          </div>
+        </div>
+
+        <label className="block mt-4">
+          <span className="block text-xs mb-1" style={{ color: T.faint }}>Notes</span>
+          <textarea value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} rows={2}
+                    placeholder="Payment terms, bank details…"
+                    className="w-full rounded border px-2 py-1.5 text-sm outline-none"
+                    style={{ borderColor: T.line, background: T.inputBg, color: T.ink }} />
+        </label>
+
+        {error && <p className="mt-2 text-xs" style={{ color: T.danger }}>{error}</p>}
+
+        <button onClick={exportPdf} disabled={busy}
+                className="mt-4 rounded-lg py-2.5 px-5 text-sm font-bold text-white flex items-center gap-2 disabled:opacity-40"
+                style={{ background: T.blue, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+          {busy ? "Generating…" : "Export PDF"}
+        </button>
+      </Panel>
+    </ProGate>
+  );
+}
+
 /* ============================== APP SHELL ================================= */
 
 const TABS = [
@@ -1601,6 +1905,7 @@ const TABS = [
   { id: "guide",    label: "5 · Step-by-Step Guide" },
   { id: "shopping", label: "6 · Materials & Tools" },
   { id: "design",   label: "7 · Design Studio" },
+  { id: "invoice",  label: "8 · Invoice" },
 ];
 
 export default function DIYvsProDashboard() {
@@ -1662,6 +1967,7 @@ export default function DIYvsProDashboard() {
   const [checkoutBanner, setCheckoutBanner] = useState(null); // { status: "pending"|"success"|"delayed"|"cancelled", plan }
 
   const isPro = !!(access?.is_admin || (access?.tier && access.tier !== "free"));
+  const isContractor = !!(access?.is_admin || access?.tier === "contractor");
 
   useEffect(() => {
     let id = window.localStorage.getItem("diyvspro_device_id");
@@ -2092,6 +2398,16 @@ export default function DIYvsProDashboard() {
         {tab === "design" && (
           <DesignStudio deviceId={deviceId} onPaywall={handlePaywall} onAccessChange={() => refreshAccess(deviceId)}
                         isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
+        )}
+        {tab === "invoice" && (
+          <InvoiceBuilder
+            isContractor={isContractor}
+            onUpgrade={() => {
+              setUpgradeReason("Client invoicing is a CONTRACTOR-tier feature — bill your clients directly from this job's estimate.");
+              setShowUpgrade(true);
+            }}
+            materials={materials} tier={tier} labour={labour} trade={trade} region={region} pro={pro}
+          />
         )}
       </main>
 
