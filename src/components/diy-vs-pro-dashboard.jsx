@@ -174,47 +174,6 @@ function usePersistentState(key, defaultValue) {
 
 /* --------------------------- SMALL UI ATOMS ------------------------------ */
 
-// Brand mark — isometric hex-head hammer with wrapped grip and dangling
-// strap, inspired by the reference art the app is themed around.
-function HammerLogo({ size = 40 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" className="shrink-0">
-      <defs>
-        <linearGradient id="hammerTop" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#F1F5F9" />
-          <stop offset="100%" stopColor="#CBD5E1" />
-        </linearGradient>
-        <linearGradient id="hammerRight" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#94A3B8" />
-          <stop offset="100%" stopColor="#64748B" />
-        </linearGradient>
-        <linearGradient id="hammerLeft" x1="1" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#475569" />
-          <stop offset="100%" stopColor="#334155" />
-        </linearGradient>
-        <linearGradient id="hammerGrip" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3F2A1D" />
-          <stop offset="100%" stopColor="#241608" />
-        </linearGradient>
-      </defs>
-      <path d="M 44 94 q -8 3 -8 -7 q 0 -8 8 -8" fill="none" stroke="#241608" strokeWidth="3.4" strokeLinecap="round" />
-      <rect x="44" y="63" width="12" height="28" rx="2.5" fill="url(#hammerGrip)" />
-      <rect x="44" y="68" width="12" height="2.4" fill="#8B6A4A" />
-      <rect x="44" y="74" width="12" height="2.4" fill="#8B6A4A" />
-      <rect x="44" y="80" width="12" height="2.4" fill="#8B6A4A" />
-      <polygon points="50,12 82,30 50,44 18,30" fill="url(#hammerTop)" />
-      <polygon points="82,30 82,58 50,72 50,44" fill="url(#hammerRight)" />
-      <polygon points="18,30 50,44 50,72 18,58" fill="url(#hammerLeft)" />
-      <path d="M 24 32 L 34 40 L 30 46 L 40 54" fill="none" stroke="#93C5FD" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
-      <path d="M 62 24 L 56 34 L 66 40 L 58 50" fill="none" stroke="#93C5FD" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
-      <circle cx="30" cy="46" r="1.8" fill="#BFDBFE" />
-      <circle cx="58" cy="50" r="1.8" fill="#BFDBFE" />
-      <polygon points="50,12 82,30 82,58 50,72 18,58 18,30" fill="none" stroke="#1E293B" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M 50 12 L 50 44 M 82 30 L 50 44 L 18 30 M 50 44 L 50 72" fill="none" stroke="#1E293B" strokeWidth="1.4" opacity="0.55" />
-    </svg>
-  );
-}
-
 // Uppercase blueprint-style label above a field or block.
 function Eyebrow({ children, color = T.blue }) {
   return (
@@ -2246,7 +2205,7 @@ export default function DIYvsProDashboard() {
       {/* Masthead */}
       <header className="border-b backdrop-blur-md" style={{ background: T.headerBg, borderColor: T.line }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-          <HammerLogo size={40} />
+          <img src="/web-app-manifest-192x192.png" alt="DIY vs PRO" className="rounded-lg shrink-0" style={{ width: 40, height: 40 }} />
           <div>
             <h1 className="text-lg font-black uppercase leading-tight text-white"
                 style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "0.06em" }}>
